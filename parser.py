@@ -6,4 +6,3 @@ class Parser_Error(Exception):
 class MapParser():
     def __init__(self, map_path: str) -> None:
         self.map_path = map_path
-   

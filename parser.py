@@ -24,9 +24,9 @@ class MapParser():
         return data
 
     def clean_empty_lines(self, data: list[str]) -> list[str]:
-        for line in data:
+        for i, line in enumerate(data):
             if line == "":
-                data.remove(line)
+                data.remove(data[i])
         return data
 
 # def read_map(map: MapParser):

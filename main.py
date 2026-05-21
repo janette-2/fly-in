@@ -13,7 +13,8 @@ def main() -> int:
         parser = MapParser(map_path)
         data_with_comments = parser.read_map()
         data_no_comment = parser.clean_comments(data_with_comments)
-        data = parser.clean_next_line(data_no_comment)
+        data_no_next_line = parser.clean_next_line(data_no_comment)
+        data = parser.clean_empty_lines(data_no_next_line)
         print(data)
     except Parser_Error as e:
         print(f"{e}")

@@ -11,10 +11,7 @@ def main() -> int:
     map_path = sys.argv[1]
     try:
         parser = MapParser(map_path)
-        data_with_comments = parser.read_map()
-        data_no_comment = parser.clean_comments(data_with_comments)
-        data_no_next_line = parser.clean_next_line(data_no_comment)
-        data = parser.clean_empty_lines(data_no_next_line)
+        data = parser.cleaned_map()
         print(data)
     except Parser_Error as e:
         print(f"{e}")

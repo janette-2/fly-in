@@ -54,4 +54,31 @@ class MapParser():
         data_cleaned = self.clean_empty_lines(data_no_next_line)
         return data_cleaned
 
+    def checking_data(self, data: list[tuple[int, str]]):
+        # Check: nb_drones
+        data_0_n, data_0_line = data[0]
+        if not data_0_line.startswith("nb_drones"):
+            print(f"Error at line: {data_0_n}, missing the specification"
+                  " of 'nb_drones: <int>'")
+
+        # Check: start_hub
+        data_1_n, data_1_line = data[1]
+        if not data_1_line.startswith("start_hub"):
+            print(f"Error at line: {data_1_n}, missing the specification"
+                  " of 'start_hub': <hub configuration>'")
+
+        # Check: hub
+        counter_hubs = 0
+        for data_n, data_line in data[2:]:
+            counter_hubs += 1
+            if not data_line.startswith("hub:") and counter_hubs > 0:
+                print(f"Error in line: {data_n}, missing the specification of 'hub': <hub configuration>")
+                break
+
+        # Check: end_hub
+        data_2_n, data_2_line = data[2]
+        if not data_2_line.startswith("end_hub"):
+            print(f"Error at line: {data_2_n}, missing the specification"
+                  " of 'end_hub': <hub configuration>'")
+
 # def read_map(map: MapParser):

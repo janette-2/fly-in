@@ -13,6 +13,7 @@ def main() -> int:
         parser = MapParser(map_path)
         data = parser.cleaned_map()
         print(data)
+        parser.checking_data(data)
     except Parser_Error as e:
         print(f"{e}")
         return 1

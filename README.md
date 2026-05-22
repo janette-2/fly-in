@@ -12,7 +12,7 @@ tar -xzf maps.tar.gz
 
 CREACION DE EXCEPCION:
 - Parser_Error (Error generico de parseo)
-
+- DEBE CAPTURAR INDEXERROR, para cuando va a buscar un dato en el texto y el mapa pasado no tiene la cantidad de contenido necesario para llegar a la posicion del dato necesario.
 USO DE SystemExit():
 ```
 Qué hace \SystemExit(main())``

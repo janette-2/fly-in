@@ -1,13 +1,14 @@
 class Parser_Error(Exception):
-    def __init__(self, *args: object) -> None:
-        super().__init__(*args)
+    def __init__(self, line_n: int, msg: str) -> None:
+        super().__init__(f"Error at line {line_n}: {msg}")
 
 
 class MapParser():
     def __init__(self, map_path: str) -> None:
         self.map_path = map_path
+        self.nb_drones = 0
 
-    def read_map(self) -> list[tuple[int, str]]:
+    def _read_map(self) -> list[tuple[int, str]]:
         with open(self.map_path, "r", encoding="utf-8") as file:
             data = file.readlines()
 
@@ -16,8 +17,8 @@ class MapParser():
             result.append((line_n, line))
         return result
 
-    def clean_comments(self, data: list[tuple[int, str]]
-                       ) -> list[tuple[int, str]]:
+    def _clean_comments(self, data: list[tuple[int, str]]
+                        ) -> list[tuple[int, str]]:
         no_comments = []
         for line_n, line in data:
             if line.startswith('#'):
@@ -25,16 +26,16 @@ class MapParser():
             no_comments.append((line_n, line))
         return no_comments
 
-    def clean_next_line(self, data: list[tuple[int, str]]
-                        ) -> list[tuple[int, str]]:
+    def _clean_next_line(self, data: list[tuple[int, str]]
+                         ) -> list[tuple[int, str]]:
         no_next_line = []
         for line_n, line in data:
             line_cleaned = line.rstrip("\n")
             no_next_line.append((line_n, line_cleaned))
         return no_next_line
 
-    def clean_empty_lines(self, data: list[tuple[int, str]]
-                          ) -> list[tuple[int, str]]:
+    def _clean_empty_lines(self, data: list[tuple[int, str]]
+                           ) -> list[tuple[int, str]]:
         no_empty_lines = []
         for line_n, line in data:
             if line == "":
@@ -48,37 +49,56 @@ class MapParser():
         Maintaining the original line indexes in case a parsing error
         needs to be reported.
         """
-        data = self.read_map()
-        data_no_comment = self.clean_comments(data)
-        data_no_next_line = self.clean_next_line(data_no_comment)
-        data_cleaned = self.clean_empty_lines(data_no_next_line)
+        data = self._read_map()
+        data_no_comment = self._clean_comments(data)
+        data_no_next_line = self._clean_next_line(data_no_comment)
+        data_cleaned = self._clean_empty_lines(data_no_next_line)
         return data_cleaned
 
-    def checking_data(self, data: list[tuple[int, str]]):
-        # Check: nb_drones
-        data_0_n, data_0_line = data[0]
-        if not data_0_line.startswith("nb_drones"):
-            print(f"Error at line: {data_0_n}, missing the specification"
-                  " of 'nb_drones: <int>'")
+    def checking_data(self, data: list[tuple[int, str]]) -> None:
+        # Check: nb_drones always at first line
+        self._validate_nb_drones(data[0])
 
-        # Check: start_hub
-        data_1_n, data_1_line = data[1]
-        if not data_1_line.startswith("start_hub"):
-            print(f"Error at line: {data_1_n}, missing the specification"
-                  " of 'start_hub': <hub configuration>'")
+        # Dispatcher for the rest of categories
+        for line_n, line_text in data[1:]:
+            if line_text.startswith("start_hub:"):
+                self._validate_start_hub(line_n, line_text)
+            elif line_text.startswith("hub:"):
+                self._validate_hub(line_n, line_text)
+            elif line_text.startswith("end_hub:"):
+                self._validate_end_hub(line_n, line_text)
+            elif line_text.startswith("connection:"):
+                self._validate_connection(line_n, line_text)
+            else:
+                raise Parser_Error(line_n, "invalid specification detected"
+                                   f" in '{line_text}'")
 
-        # Check: hub
-        counter_hubs = 0
-        for data_n, data_line in data[2:]:
-            counter_hubs += 1
-            if not data_line.startswith("hub:") and counter_hubs > 0:
-                print(f"Error in line: {data_n}, missing the specification of 'hub': <hub configuration>")
-                break
+    def _validate_nb_drones(self, data: tuple[int, str]) -> None:
 
-        # Check: end_hub
-        data_2_n, data_2_line = data[2]
-        if not data_2_line.startswith("end_hub"):
-            print(f"Error at line: {data_2_n}, missing the specification"
-                  " of 'end_hub': <hub configuration>'")
+        data_0_n, data_0_line = data
 
-# def read_map(map: MapParser):
+        if not data_0_line.startswith("nb_drones:"):
+            raise Parser_Error(data_0_n, "missing the "
+                               "specification of 'nb_drones: <int>'")
+
+        # Recollection of the nb_drones specified
+        index_number = data_0_line.index(":")
+        number_nb = ""
+        for char in data_0_line:
+            if data_0_line.index(char) <= (index_number + 1):
+                continue
+            number_nb = number_nb + char
+
+        # Conversion to int
+        try:
+            self.nb_drones = int(number_nb)
+        except ValueError:
+            raise Parser_Error(data_0_n, "Invalid amount passed to 'nb_drones'"
+                               f", passed argument: '{number_nb}'")
+
+        # Checking if it fits the valid range
+        if self.nb_drones <= 0:
+            raise Parser_Error(data_0_n, "Invalid amount passed to 'nb_drones'"
+                               ", the specified quantity should be a value"
+                               " greater than 0. "
+                               f"Passed argument: '{number_nb}'")

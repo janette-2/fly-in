@@ -102,3 +102,22 @@ class MapParser():
                                ", the specified quantity should be a value"
                                " greater than 0. "
                                f"Passed argument: '{number_nb}'")
+    
+    def _validate_start_hub(self, data_n, data_content) -> None:
+        list_config = data_content.split()
+        if len(list_config) == 5 or len(list_config) == 4:
+            name = list_config[1]
+            x = list_config[2]
+            y = list_config[3]
+            if len(list_config) == 5:
+                meta = list_config[4]
+            try:
+                x = int(x)
+                y = int(y)
+            except ValueError:
+                raise Parser_Error(data_n, f"Invalid coordinates of the hub, the given value is not an int:\n   '{data_content}'")
+        else:
+            raise Parser_Error(data_n, "Invalid configuration of the hub. It should follow the structure of: \n"
+                               "    hub: <name> <x> <y> [metadata]")
+        # Primero sale hub: y luego lo demás, lo de antes de los dos puntos, obviar.
+        

@@ -21,4 +21,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())  # real exit number in code main()
+    main()
+    # real exit number in code main()
+    # raise SystemExit(main())

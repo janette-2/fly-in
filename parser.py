@@ -7,6 +7,14 @@ class MapParser():
     def __init__(self, map_path: str) -> None:
         self.map_path = map_path
         self.nb_drones = 0
+        self.name_start = ""
+        self.meta_start = ""
+        self.x_start = 0
+        self.y_start = 0
+        self.name_end = ""
+        self.meta_end = ""
+        self.x_end = 0
+        self.y_end = 0
 
     def _read_map(self) -> list[tuple[int, str]]:
         with open(self.map_path, "r", encoding="utf-8") as file:
@@ -73,6 +81,55 @@ class MapParser():
                 raise Parser_Error(line_n, "invalid specification detected"
                                    f" in '{line_text}'")
 
+    def _parse_config_hubs(self, data_n: int, data_content: str, prefix: str
+                           ) -> tuple[str, str, str, str]:
+        """
+        Se le pasa el nº de línea, el contenido y el prefijo del dato
+        (desde el dispatcher de chacking_data)
+
+        Devuelve los datos separados adecuadamente:
+            name : str
+            x : str
+            y : str
+            meta: str
+        """
+        # Strip only erases the spaces at the start or end of a string
+        body = data_content.replace(prefix, "", 1).strip()
+        i = 0
+        if "[" not in body:
+            list_simple_data = body.split()
+            if len(list_simple_data) == 3:
+                name = list_simple_data[0]
+                x = list_simple_data[1]
+                y = list_simple_data[2]
+                metadata = ""
+                tup_simple_data = (name, x, y, metadata)
+                return tup_simple_data
+            else:
+                raise Parser_Error(data_n, "Invalid structure of the hub."
+                                   " It should be: <name> <x> <y>,"
+                                   f"\n but found: {data_content}")
+
+        else:
+            start_meta = 0
+            while i < len(body):
+                if body[i] == "[":
+                    start_meta = i
+                i += 1
+            metadata = body[start_meta:]
+            main_part = body[:start_meta - 1].strip()
+            list_complex_data = main_part.split()
+            if not metadata.endswith("]") or len(list_complex_data) != 3:
+                raise Parser_Error(data_n, "Invalid structure of the hub."
+                                   " It should be: <name> <x> <y> [metadata],"
+                                   f"\n but found: {data_content}")
+            else:
+                name = list_complex_data[0]
+                x = list_complex_data[1]
+                y = list_complex_data[2]
+                tup_complex_data = (name, x, y, metadata)
+                return tup_complex_data
+
     def _validate_nb_drones(self, data: tuple[int, str]) -> None:
 
         data_0_n, data_0_line = data
@@ -102,22 +159,45 @@ class MapParser():
                                ", the specified quantity should be a value"
                                " greater than 0. "
                                f"Passed argument: '{number_nb}'")
-    
-    def _validate_start_hub(self, data_n, data_content) -> None:
+
+    def _validate_start_hub(self, data_n: int, data_content: str) -> None:
         list_config = data_content.split()
         if len(list_config) == 5 or len(list_config) == 4:
-            name = list_config[1]
+            self.name_start = list_config[1]
             x = list_config[2]
             y = list_config[3]
             if len(list_config) == 5:
-                meta = list_config[4]
+                self.meta_start = list_config[4]
             try:
-                x = int(x)
-                y = int(y)
+                self.x_start = int(x)
+                self.y_start = int(y)
             except ValueError:
-                raise Parser_Error(data_n, f"Invalid coordinates of the hub, the given value is not an int:\n   '{data_content}'")
+                raise Parser_Error(data_n, "Invalid coordinates of the hub, "
+                                   "the given value is not an int:\n"
+                                   f"   '{data_content}'")
         else:
-            raise Parser_Error(data_n, "Invalid configuration of the hub. It should follow the structure of: \n"
+            raise Parser_Error(data_n, "Invalid configuration of the hub."
+                               " It should follow the structure of: \n"
                                "    hub: <name> <x> <y> [metadata]")
-        # Primero sale hub: y luego lo demás, lo de antes de los dos puntos, obviar.
-        
+
+    def _validate_end_hub(self, data_n: int, data_content: str) -> None:
+        list_config = data_content.split()
+        if len(list_config) == 5 or len(list_config) == 4:
+            self.name_end = list_config[1]
+            x = list_config[2]
+            y = list_config[3]
+            if len(list_config) == 5:
+                self.meta_end = list_config[4]
+            try:
+                self.x_end = int(x)
+                self.y_end = int(y)
+            except ValueError:
+                raise Parser_Error(data_n, "Invalid coordinates of the hub, "
+                                           "the given value is not an int:\n"
+                                           f"   '{data_content}'")
+        else:
+            raise Parser_Error(data_n, "Invalid configuration of the hub."
+                                       " It should follow the structure of: \n"
+                                       "    hub: <name> <x> <y> [metadata]")
+        # Primero sale hub: y luego lo demás, lo de
+        # antes de los dos puntos, obviar.

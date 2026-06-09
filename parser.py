@@ -1,3 +1,6 @@
+from hubs import Hubs
+
+
 class Parser_Error(Exception):
     def __init__(self, line_n: int, msg: str) -> None:
         super().__init__(f"Error at line {line_n}: {msg}")
@@ -7,14 +10,7 @@ class MapParser():
     def __init__(self, map_path: str) -> None:
         self.map_path = map_path
         self.nb_drones = 0
-        self.name_start = ""
-        self.meta_start = ""
-        self.x_start = 0
-        self.y_start = 0
-        self.name_end = ""
-        self.meta_end = ""
-        self.x_end = 0
-        self.y_end = 0
+        self.hubs = {}
 
     def _read_map(self) -> list[tuple[int, str]]:
         with open(self.map_path, "r", encoding="utf-8") as file:
@@ -70,11 +66,20 @@ class MapParser():
         # Dispatcher for the rest of categories
         for line_n, line_text in data[1:]:
             if line_text.startswith("start_hub:"):
-                self._validate_start_hub(line_n, line_text)
+                tup_hub_config = self._parse_config_hubs(line_n, line_text,
+                                                         "start_hub:")
+                self._validate_hub("start", line_n, tup_hub_config)
+
             elif line_text.startswith("hub:"):
-                self._validate_hub(line_n, line_text)
+                tup_hub_config = self._parse_config_hubs(line_n, line_text,
+                                                         "hub:")
+                self._validate_hub("hub", line_n, tup_hub_config)
+
             elif line_text.startswith("end_hub:"):
-                self._validate_end_hub(line_n, line_text)
+                tup_hub_config = self._parse_config_hubs(line_n, line_text,
+                                                         "end_hub:")
+                self._validate_hub("end", line_n, tup_hub_config) 
+
             elif line_text.startswith("connection:"):
                 self._validate_connection(line_n, line_text)
             else:
@@ -160,44 +165,17 @@ class MapParser():
                                " greater than 0. "
                                f"Passed argument: '{number_nb}'")
 
-    def _validate_start_hub(self, data_n: int, data_content: str) -> None:
-        list_config = data_content.split()
-        if len(list_config) == 5 or len(list_config) == 4:
-            self.name_start = list_config[1]
-            x = list_config[2]
-            y = list_config[3]
-            if len(list_config) == 5:
-                self.meta_start = list_config[4]
-            try:
-                self.x_start = int(x)
-                self.y_start = int(y)
-            except ValueError:
-                raise Parser_Error(data_n, "Invalid coordinates of the hub, "
-                                   "the given value is not an int:\n"
-                                   f"   '{data_content}'")
-        else:
-            raise Parser_Error(data_n, "Invalid configuration of the hub."
-                               " It should follow the structure of: \n"
-                               "    hub: <name> <x> <y> [metadata]")
+    def _validate_hub(self, role: str, data_n: int, data_tuple: tuple[str, str,
+                                                                      str, str]) -> None:
+        name, x, y, metadata = data_tuple
+        try:
+            x = int(x)
+            y = int(y)
+        except ValueError:
+            raise Parser_Error(data_n, "Invalid coordinates of the hub, "
+                               "the given values to x or y are not an int")
 
-    def _validate_end_hub(self, data_n: int, data_content: str) -> None:
-        list_config = data_content.split()
-        if len(list_config) == 5 or len(list_config) == 4:
-            self.name_end = list_config[1]
-            x = list_config[2]
-            y = list_config[3]
-            if len(list_config) == 5:
-                self.meta_end = list_config[4]
-            try:
-                self.x_end = int(x)
-                self.y_end = int(y)
-            except ValueError:
-                raise Parser_Error(data_n, "Invalid coordinates of the hub, "
-                                           "the given value is not an int:\n"
-                                           f"   '{data_content}'")
-        else:
-            raise Parser_Error(data_n, "Invalid configuration of the hub."
-                                       " It should follow the structure of: \n"
-                                       "    hub: <name> <x> <y> [metadata]")
-        # Primero sale hub: y luego lo demás, lo de
-        # antes de los dos puntos, obviar.
+        if x < 0 or y < 0:
+            raise Parser_Error(data_n, "The coordinates of x or y for the hub:"
+                               f" '{name}' must be greater than zero")
+        self.hubs[name] = Hubs(name, x, y, metadata, role)

@@ -78,7 +78,7 @@ class MapParser():
             elif line_text.startswith("end_hub:"):
                 tup_hub_config = self._parse_config_hubs(line_n, line_text,
                                                          "end_hub:")
-                self._validate_hub("end", line_n, tup_hub_config) 
+                self._validate_hub("end", line_n, tup_hub_config)
 
             elif line_text.startswith("connection:"):
                 self._validate_connection(line_n, line_text)

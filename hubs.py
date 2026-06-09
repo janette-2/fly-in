@@ -6,4 +6,3 @@ class Hubs():
         self.y = y
         self.role = role
         self.metadata = metadata
-

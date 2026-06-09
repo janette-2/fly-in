@@ -165,8 +165,8 @@ class MapParser():
                                " greater than 0. "
                                f"Passed argument: '{number_nb}'")
 
-    def _validate_hub(self, role: str, data_n: int, data_tuple: tuple[str, str,
-                                                                      str, str]) -> None:
+    def _validate_hub(self, role: str, data_n: int,
+                      data_tuple: tuple[str, str, str, str]) -> None:
         name, x, y, metadata = data_tuple
         try:
             x = int(x)

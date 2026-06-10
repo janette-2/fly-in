@@ -135,6 +135,47 @@ class MapParser():
                 tup_complex_data = (name, x, y, metadata)
                 return tup_complex_data
 
+    def _parse_config_connections(self, data_n: int, data_content: str, prefix: str
+                                  ) -> tuple[str, str, str]:
+        """
+        Se le pasa el nº de línea, el contenido y el prefijo del dato
+        (desde el dispatcher de chacking_data)
+
+        Devuelve los datos separados adecuadamente:
+            name1 : str
+            name2 : str
+            meta: str
+        """
+        # Strip only erases the spaces at the start or end of a string
+        body = data_content.replace(prefix, "", 1).strip()
+        i = 0
+        if "[" not in body:
+            names = body.split("-")
+            name1 = names[0]
+            name2 = names[1]
+            metadata = ""
+            tup_simple_data = (name1, name2, metadata)
+            return tup_simple_data
+        else:
+            start_meta = 0
+            while i < len(body):
+                if body[i] == "[":
+                    start_meta = i
+                i += 1
+            metadata = body[start_meta:]
+            main_part = body[:start_meta - 1].strip()
+            list_complex_data = main_part.split()
+            if not metadata.endswith("]") or len(list_complex_data) != 3:
+                raise Parser_Error(data_n, "Invalid structure of the hub."
+                                   " It should be: <name> <x> <y> [metadata],"
+                                   f"\n but found: {data_content}")
+            else:
+                name = list_complex_data[0]
+                x = list_complex_data[1]
+                y = list_complex_data[2]
+                tup_complex_data = (name, x, y, metadata)
+                return tup_complex_data
+
     def _validate_nb_drones(self, data: tuple[int, str]) -> None:
 
         data_0_n, data_0_line = data
@@ -179,3 +220,7 @@ class MapParser():
             raise Parser_Error(data_n, "The coordinates of x or y for the hub:"
                                f" '{name}' must be greater than zero")
         self.hubs[name] = Hubs(name, x, y, metadata, role)
+
+        if "-" in name:
+            raise Parser_Error(data_n, "The name cannot use '-'. "
+                               f"The given name has been: '{name}'")

@@ -1,4 +1,4 @@
-from hubs import Hubs
+from zones import Zones
 
 
 class Parser_Error(Exception):
@@ -10,7 +10,9 @@ class MapParser():
     def __init__(self, map_path: str) -> None:
         self.map_path = map_path
         self.nb_drones = 0
-        self.hubs = {}
+        self.start_count = 0
+        self.end_count = 0
+        self.zones = {}
 
     def _read_map(self) -> list[tuple[int, str]]:
         with open(self.map_path, "r", encoding="utf-8") as file:
@@ -81,10 +83,17 @@ class MapParser():
                 self._validate_hub("end", line_n, tup_hub_config)
 
             elif line_text.startswith("connection:"):
-                self._validate_connection(line_n, line_text)
+                tup_conn_config = self._parse_config_connections(line_n,
+                                                                 line_text,
+                                                                 "connection:")
+                self._validate_connection(line_n, tup_conn_config)
             else:
                 raise Parser_Error(line_n, "invalid specification detected"
                                    f" in '{line_text}'")
+
+        if self.start_count != 1 or self.end_count != 1:
+            raise Parser_Error(0, "Map must contain exactly one "
+                               "start_hub and one end_hub")
 
     def _parse_config_hubs(self, data_n: int, data_content: str, prefix: str
                            ) -> tuple[str, str, str, str]:
@@ -92,7 +101,7 @@ class MapParser():
         Se le pasa el nº de línea, el contenido y el prefijo del dato
         (desde el dispatcher de chacking_data)
 
-        Devuelve los datos separados adecuadamente:
+        Devuelve los datos separados adecuadamente dentro de una tupla:
             name : str
             x : str
             y : str
@@ -113,7 +122,7 @@ class MapParser():
             else:
                 raise Parser_Error(data_n, "Invalid structure of the hub."
                                    " It should be: <name> <x> <y>,"
-                                   f"\n but found: {data_content}")
+                                   f"\n but found: '{data_content}'")
 
         else:
             start_meta = 0
@@ -127,7 +136,7 @@ class MapParser():
             if not metadata.endswith("]") or len(list_complex_data) != 3:
                 raise Parser_Error(data_n, "Invalid structure of the hub."
                                    " It should be: <name> <x> <y> [metadata],"
-                                   f"\n but found: {data_content}")
+                                   f"\n but found: '{data_content}'")
             else:
                 name = list_complex_data[0]
                 x = list_complex_data[1]
@@ -135,20 +144,21 @@ class MapParser():
                 tup_complex_data = (name, x, y, metadata)
                 return tup_complex_data
 
-    def _parse_config_connections(self, data_n: int, data_content: str, prefix: str
+    def _parse_config_connections(self, data_n: int,
+                                  data_content: str,
+                                  prefix: str
                                   ) -> tuple[str, str, str]:
         """
         Se le pasa el nº de línea, el contenido y el prefijo del dato
         (desde el dispatcher de chacking_data)
 
-        Devuelve los datos separados adecuadamente:
+        Devuelve los datos separados adecuadamente en una tupla:
             name1 : str
             name2 : str
             meta: str
         """
         # Strip only erases the spaces at the start or end of a string
         body = data_content.replace(prefix, "", 1).strip()
-        i = 0
         if "[" not in body:
             names = body.split("-")
             name1 = names[0]
@@ -157,6 +167,7 @@ class MapParser():
             tup_simple_data = (name1, name2, metadata)
             return tup_simple_data
         else:
+            i = 0
             start_meta = 0
             while i < len(body):
                 if body[i] == "[":
@@ -164,17 +175,15 @@ class MapParser():
                 i += 1
             metadata = body[start_meta:]
             main_part = body[:start_meta - 1].strip()
-            list_complex_data = main_part.split()
-            if not metadata.endswith("]") or len(list_complex_data) != 3:
+            names = main_part.split("-")
+            if not metadata.endswith("]") or len(names) != 2:
                 raise Parser_Error(data_n, "Invalid structure of the hub."
-                                   " It should be: <name> <x> <y> [metadata],"
+                                   " It should be: <name1>-<name2> [metadata],"
                                    f"\n but found: {data_content}")
-            else:
-                name = list_complex_data[0]
-                x = list_complex_data[1]
-                y = list_complex_data[2]
-                tup_complex_data = (name, x, y, metadata)
-                return tup_complex_data
+            name1 = names[0]
+            name2 = names[1]
+            tup_complex_data = (name1, name2, metadata)
+            return tup_complex_data
 
     def _validate_nb_drones(self, data: tuple[int, str]) -> None:
 
@@ -216,11 +225,30 @@ class MapParser():
             raise Parser_Error(data_n, "Invalid coordinates of the hub, "
                                "the given values to x or y are not an int")
 
+        if name in self.zones:
+            raise Parser_Error(data_n, f"The zones created must be unique."
+                               f" Found duplicates for {name}")
+
         if x < 0 or y < 0:
             raise Parser_Error(data_n, "The coordinates of x or y for the hub:"
                                f" '{name}' must be greater than zero")
-        self.hubs[name] = Hubs(name, x, y, metadata, role)
 
         if "-" in name:
             raise Parser_Error(data_n, "The name cannot use '-'. "
                                f"The given name has been: '{name}'")
+
+        if role == "start":
+            self.start_count += 1
+
+        if role == "end":
+            self.end_count += 1
+
+        if self.end_count > 1 or self.start_count > 1:
+            raise Parser_Error(data_n, "There must be only one zone for the "
+                               "start and end. Found duplicates.")
+
+        self.zones[name] = Zones(name, x, y, metadata, role)
+
+    def _validate_connection(self, data_n: int,
+                      data_tuple: tuple[str, str, str]) -> None:
+        pass

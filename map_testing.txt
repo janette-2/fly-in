@@ -1,6 +1,5 @@
 #Commentsss
 nb_drones: 1
 
-start_hub: name1-v 0 0 []
-hub: 0
-endd_hub: 0
+start_hub: name1 0 0 []
+hub: name2 0 1

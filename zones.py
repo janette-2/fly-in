@@ -1,4 +1,4 @@
-class Hubs():
+class Zones():
     def __init__(self, name: str, x: int, y: int, metadata: str,
                  role: str) -> None:
         self.name = name

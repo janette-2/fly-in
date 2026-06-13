@@ -2,41 +2,50 @@ from errors import Parser_Error
 
 
 class Connections():
-    """Represents a bidirectional connection between two zones.
+    """Stores a bidirectional link between two zones.
 
-    Stores the connected zone names and the parsed link capacity
-    from metadata.
+    A connection is an edge in the graph. It connects two zones
+    and can have a metadata that limits how many drones can cross
+    it in the same turn (max_link_capacity).
+
+    The map file writes it like this:
+        connection: zoneA-zoneB [max_link_capacity=3]
     """
 
     def __init__(self, zone1: str, zone2: str,
                  metadata: str, line_n: int = 0) -> None:
-        """Initializes a Connection with raw data and parses its metadata.
+        """Creates a connection and parses its metadata.
 
         Args:
             zone1: Name of the first zone.
             zone2: Name of the second zone.
-            metadata: Raw metadata string (e.g. "[max_link_capacity=2]").
-            line_n: Source line number for error reporting.
+            metadata: Raw text inside brackets, or "".
+                Example: "[max_link_capacity=2]".
+            line_n: Line number in the map file (for errors).
         """
         self.zone1 = zone1
         self.zone2 = zone2
-        self.max_link_capacity = 1
+        self.max_link_capacity = 1   # default: 1 drone per turn
         self._parser_metadata(metadata, line_n)
 
     def _parser_metadata(self, metadata: str, line_n: int) -> None:
-        """Parses and validates the connection metadata string.
+        """Reads the bracketed metadata and sets the link capacity.
 
-        Supported keys: max_link_capacity.
-        Unknown keys are silently ignored.
-        Raises Parser_Error on invalid format or values.
+        The metadata looks like:  [max_link_capacity=2]
+        This method extracts the value and checks it is valid.
+
+        Rules from the subject:
+        - max_link_capacity must be a positive integer
+        - Unknown keys are silently ignored
+        - Nested brackets are not allowed
 
         Args:
-            metadata: Raw metadata string.
-            line_n: Source line number for error reporting.
+            metadata: The raw bracket string, or "".
+            line_n: Line number for error messages.
 
         Raises:
-            Parser_Error: If metadata syntax is invalid or
-                max_link_capacity is not a positive integer.
+            Parser_Error: If the syntax is wrong or max_link_capacity
+                is not a positive integer.
         """
         if not metadata or metadata == "[]":
             return

@@ -1,75 +1,589 @@
 # fly-in
 
-Simulador de rutas de drones con parseo de mapas.
+A drone routing simulator. Drones navigate through a network of zones
+(hubs) connected by paths. The goal is to move all drones from the
+start zone to the end zone in as few turns as possible.
 
-## Requisitos
+---
 
+## Table of Contents
+
+1. [How the Map Works](#1-how-the-map-works)
+2. [Project Structure](#2-project-structure)
+3. [Requirements & Setup](#3-requirements--setup)
+4. [Makefile Commands](#4-makefile-commands)
+5. [The Parser (reading the map)](#5-the-parser-reading-the-map)
+6. [Pathfinding (finding the route)](#6-pathfinding-finding-the-route)
+   - [6.1 What is a graph?](#61-what-is-a-graph)
+   - [6.2 _build_graph() — turning the map into a graph](#62-_build_graph--turning-the-map-into-a-graph)
+   - [6.3 Dijkstra's algorithm explained with pictures](#63-dijkstras-algorithm-explained-with-pictures)
+   - [6.4 The key tools in Dijkstra](#64-the-key-tools-in-dijkstra)
+   - [6.5 Why Dijkstra beats "pick the cheapest neighbor"](#65-why-dijkstra-beats-pick-the-cheapest-neighbor)
+7. [The Simulator (moving the drones)](#7-the-simulator-moving-the-drones)
+8. [Subject Specifications Summary](#8-subject-specifications-summary)
+9. [Draft Notes](#9-draft-notes)
+
+---
+
+## 1. How the Map Works
+
+A map file describes the drone network. It looks like this:
+
+```
+nb_drones: 5
+start_hub: start 0 0 [color=green max_drones=4]
+hub: slow_path1 1 -1 [zone=restricted color=red]
+hub: fast_path 2 0 [zone=priority color=blue]
+end_hub: goal 4 0 [color=green max_drones=4]
+connection: start-slow_path1
+connection: start-fast_path
+connection: fast_path-goal
+connection: slow_path1-goal
+```
+
+**What each line means:**
+
+```
+start_hub:  name    x  y   [metadata]
+   ↑          ↑     ↑  ↑       ↑
+   role    unique  coord   optional settings
+          identifier        in brackets
+```
+
+**Zone types (from the subject):**
+
+| Type | Cost | Can drones enter? | Description |
+|------|------|-------------------|-------------|
+| `normal` | 1 turn | Yes | Standard zone (default) |
+| `priority` | 1 turn | Yes | Same cost as normal, but pathfinding should prefer it |
+| `restricted` | 2 turns | Yes | Slow zone — takes 2 turns to move into |
+| `blocked` | never | No | Inaccessible — drones cannot enter or pass through |
+
+**Connection metadata:**
+- `max_link_capacity=N` — limits how many drones can cross this connection
+  in the same turn (default: 1)
+
+**Zone metadata:**
+- `zone=TYPE` — sets the zone type (default: normal)
+- `color=VALUE` — any single word for terminal display (default: none)
+- `max_drones=N` — max drones in this zone at once (default: 1)
+
+---
+
+## 2. Project Structure
+
+```
+fly-in/
+├── main.py          # Entry point — run this
+├── parser.py        # Reads and validates map files
+├── zones.py         # Zone (hub) class
+├── connections.py   # Connection class
+├── errors.py        # Custom error class
+├── simulator.py     # Drone + Simulation (pathfinding + turn engine)
+├── Makefile         # Automation commands
+├── maps/            # Map files (easy, medium, hard, challenger)
+│   ├── easy/
+│   ├── medium/
+│   ├── hard/
+│   └── challenger/
+├── subject.md       # Full project specification
+└── README.md        # This file
+```
+
+---
+
+## 3. Requirements & Setup
+
+**You need:**
 - Python 3.12+
-- [uv](https://docs.astral.sh/uv/) — gestor de paquetes que aísla las dependencias sin contaminar el entorno del sistema.
+- [uv](https://docs.astral.sh/uv/) — a fast Python package manager
 
-## Makefile
+**Why uv?**
+- It installs tools in **isolated directories** (`~/.local/share/uv/tools/`),
+  not in your system Python. No pollution.
+- It avoids the `externally-managed-environment` error on Debian/Ubuntu.
+- It is 10-100x faster than pip.
 
-| Target         | Descripción |
-|----------------|-------------|
-| `make` / `make all` | Ejecuta `lint` (target por defecto). |
-| `make install` | Instala `flake8` y `mypy` con `uv tool install` en entornos aislados. |
-| `make run MAP=<archivo>` | Ejecuta el simulador con el mapa indicado. Si no se pasa `MAP`, usa `maps/medium/03_priority_puzzle.txt`. |
-| `make debug MAP=<archivo>` | Ejecuta el simulador con `pdb` para depuración paso a paso. |
-| `make clean` | Elimina `__pycache__`, `.mypy_cache`, `.pytest_cache` y archivos `*.pyc`. |
-| `make lint` | Ejecuta `flake8 .` y `mypy .` con los flags obligatorios del subject. |
-| `make lint-strict` | Ejecuta `flake8 .` y `mypy . --strict` (recomendado para mayor rigor). |
-
-### ¿Por qué uv?
-
-[uv](https://docs.astral.sh/uv/) es un gestor de paquetes y proyectos de Python escrito en Rust. Es compatible con `pip` y `pipx` pero mucho más rápido y con varias ventajas:
-
-**Aislamiento:** `uv tool install` instala herramientas (como `flake8` y `mypy`) en entornos virtuales propios dentro de `~/.local/share/uv/tools/`. Cada herramienta vive en su propio directorio sin depender del Python del sistema.
-
-**No contamina el sistema:** A diferencia de `pip install` (que instala en site-packages del sistema) o `pip install --user` (que instala en site-packages del usuario), uv no escribe ni modifica ninguna ruta de Python. Tampoco requiere `--break-system-packages`, una bandera peligrosa que desactiva la protección PEP 668 y puede romper el sistema.
-
-**Idempotente con `--force`:** Si ya tienes la herramienta instalada, `uv tool install --force` la reinstala limpiamente en su entorno aislado sin dejar residuos ni conflictos de版本.
-
-**Rapidez:** Al estar escrito en Rust, uv resuelve dependencias e instala paquetes entre 10x y 100x más rápido que `pip`, especialmente útil en proyectos grandes o CI.
-
-**Fácil de instalar:**
 ```sh
-# Con pipx
-pipx install uv
-
-# O directo (recomendado)
+# Install uv (recommended way)
 curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Or with pipx
+pipx install uv
 ```
 
-**Para este proyecto:** Ejecutando `make install` se instalan `flake8` y `mypy` con uv en sus entornos aislados. Los binarios quedan disponibles en `~/.local/bin/` y se pueden usar directamente como `flake8 .` o `mypy .`. Si en algún momento quieres desinstalarlos: `uv tool uninstall flake8`.
+---
 
-### Uso rápido
+## 4. Makefile Commands
 
+| Command | What it does |
+|---------|--------------|
+| `make` or `make all` | Runs **lint** (default target) |
+| `make install` | Installs `flake8` and `mypy` with uv |
+| `make run MAP=<file>` | Runs the simulator with a specific map |
+| `make debug MAP=<file>` | Runs the simulator with pdb (debugger) |
+| `make clean` | Deletes `__pycache__`, `.mypy_cache`, `.pytest_cache`, `*.pyc` |
+| `make lint` | Runs `flake8 .` + `mypy .` (with subject flags) |
+| `make lint-strict` | Runs `flake8 .` + `mypy . --strict` |
+
+**Example usage:**
 ```sh
-# Instalar herramientas de linting
-make install
-
-# Verificar el proyecto
-make
-
-# Ejecutar con un mapa específico
-make run MAP=maps/easy/01_simple.txt
-
-# Limpiar cachés
-make clean
+make install          # install flake8 and mypy
+make                  # lint the project
+make run MAP=maps/easy/01_linear_path.txt
 ```
 
-## Extracción de mapas
+---
 
-```sh
-tar -xzf maps.tar.gz
+## 5. The Parser (reading the map)
+
+The parser (`MapParser` in `parser.py`) does three things in order:
+
+### Step 1: Clean the file
+
+```
+Raw file                     →  After cleaning
+┌──────────────────────┐        ┌──────────────────────┐
+│ # this is a comment  │        │ nb_drones: 5         │
+│ nb_drones: 5         │   →   │ start_hub: start ...  │
+│                      │        │ hub: fast_path ...    │
+│ start_hub: start ... │        │ end_hub: goal ...     │
+│ [empty line]         │        │ connection: start-... │
+│ hub: fast_path ...   │        └──────────────────────┘
+│ end_hub: goal ...    │
+│ connection: start-.. │
+└──────────────────────┘
 ```
 
-## Notas
+- Lines starting with `#` are removed (comments)
+- Empty lines are removed
+- `\n` characters are stripped
 
-- `Parser_Error` es el error genérico de parseo. Captura `IndexError` cuando el mapa no tiene suficientes datos.
-- Para que el shell reciba el código de salida correcto: `raise SystemExit(main())`
+### Step 2: Validate each line
 
-## En sucio
+```
+For every line:
+    │
+    ├── "nb_drones:"  → check it's a positive integer
+    ├── "start_hub:"  → parse name, x, y, metadata; check it's unique
+    ├── "hub:"        → same as start_hub but can have many
+    ├── "end_hub:"    → same as start_hub but exactly one
+    └── "connection:" → parse zone1-zone2, check zones exist
+                        check no duplicates (a-b = b-a)
+
+After all lines:
+    └── Exactly 1 start_hub and 1 end_hub? If not → error
+```
+
+### Step 3: Store the data
+
+```
+self.zones = {
+    "start": Zones(name="start", x=0, y=0, role="start", ...),
+    "fast_path": Zones(name="fast_path", x=2, y=0, role="hub", ...),
+    "goal": Zones(name="goal", x=4, y=0, role="end", ...),
+    ...
+}
+
+self.connections = {
+    ("start", "fast_path"): Connections(zone1="start", zone2="fast_path"),
+    ("fast_path", "goal"): Connections(zone1="fast_path", zone2="goal"),
+    ...
+}
+```
+
+**If anything is wrong, an error is raised:**
+
+```
+Error at line 12: Invalid zone type: 'super_fast'
+Error at line 5: The connection needs two zones
+Error at line 0: Map must contain exactly one start_hub and one end_hub
+```
+
+---
+
+## 6. Pathfinding (finding the route)
+
+This is the brain of the simulator. Given a start zone and an end zone,
+find the path that takes the **fewest turns**.
+
+### 6.1 What is a graph?
+
+A map is really a **graph** — a collection of **nodes** (zones) connected
+by **edges** (connections).
+
+```
+Visual:
+                   ┌──────────┐
+                   │  start   │
+                   └────┬─────┘
+                       / \
+                      /   \
+               ┌─────┘     └──────┐
+               │                  │
+        ┌──────┴──────┐    ┌──────┴──────┐
+        │  slow_path1 │    │ fast_junction│
+        │ (restricted)│    │  (priority)  │
+        └──────┬──────┘    └──────┬──────┘
+               │                  │
+               │           ┌──────┴──────┐
+               │           │  fast_path  │
+               │           │  (priority) │
+               │           └──────┬──────┘
+               │                  │
+        ┌──────┴──────┐    ┌──────┴──────┐
+        │  slow_path2 │    │ merge_point │
+        │ (restricted)│    │   (normal)  │
+        └──────┬──────┘    └──────┬──────┘
+               │                  │
+               └──────┬───────────┘
+                      │
+               ┌──────┴──────┐
+               │    goal     │
+               └─────────────┘
+```
+
+Pathfinding algorithms work on graphs. They do not care about the
+visual layout — only about **which zone connects to which** and
+**how much each connection costs**.
+
+### 6.2 `_build_graph()` — turning the map into a graph
+
+The parser stores zones and connections in **two separate dictionaries**.
+This is good for validation, but bad for pathfinding. Pathfinding needs
+to ask: *"From zone X, which neighbors can I go to, and what does it cost?"*
+
+`_build_graph()` merges everything into one structure:
+
+```
+Before (parser):
+    zones = {
+        "start": {...},
+        "fast_junction": {... zone="priority" ...},
+        "slow_path1": {... zone="restricted" ...},
+        ...
+    }
+    connections = {
+        ("start", "fast_junction"): {...},
+        ("start", "slow_path1"): {...},
+        ...
+    }
+
+After _build_graph():
+    graph = {
+        "start":         [("fast_junction", 1), ("slow_path1", 2)],
+        "fast_junction": [("start", 1), ("fast_path", 1), ("slow_path1", 1)],
+        "fast_path":     [("fast_junction", 1), ("merge_point", 1)],
+        "slow_path1":    [("start", 1), ("fast_junction", 1), ("slow_path2", 2)],
+        "slow_path2":    [("slow_path1", 2), ("merge_point", 1)],
+        "merge_point":   [("fast_path", 1), ("slow_path2", 2), ("goal", 1)],
+        "goal":          [("merge_point", 1)],
+    }
+```
+
+Each entry in the graph says:
+- `"start": [("fast_junction", 1), ("slow_path1", 2)]`
+  → From `start`, you can go to `fast_junction` (costs 1 turn)
+    or to `slow_path1` (costs 2 turns, because it's restricted).
+
+**Blocked zones are excluded entirely** — they do not appear as keys
+or as neighbors. Drones can never enter them.
+
+### 6.3 Dijkstra's algorithm explained with pictures
+
+Let's trace the algorithm step by step on this graph:
+
+```
+start ─── fast_junction ─── fast_path ─── merge_point ─── goal
+                                                    │
+slow_path1 ─── slow_path2 ──────────────────────────┘
+```
+
+**Step 0 — Initial state:**
+
+We create a table. Every zone starts with distance `∞` (infinity,
+we use `9999999`), except `start` which is `0`.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│      Zone      │ Distance from start │ Came from │ Processed │
+├────────────────┼─────────────────────┼───────────┼───────────┤
+│ start          │          0          │    —      │     ✗     │
+│ fast_junction  │       9999999       │    ?      │     ✗     │
+│ fast_path      │       9999999       │    ?      │     ✗     │
+│ slow_path1     │       9999999       │    ?      │     ✗     │
+│ slow_path2     │       9999999       │    ?      │     ✗     │
+│ merge_point    │       9999999       │    ?      │     ✗     │
+│ goal           │       9999999       │    ?      │     ✗     │
+└────────────────┴─────────────────────┴───────────┴───────────┘
+```
+
+**Step 1 — Process `start` (distance 0):**
+
+Look at all neighbors of `start`:
+- `fast_junction`: 0 + 1 = 1 → better than 9999999 → **update!**
+- `slow_path1`: 0 + 2 = 2 → better than 9999999 → **update!**
+
+Mark `start` as processed.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│      Zone      │ Distance from start │ Came from │ Processed │
+├────────────────┼─────────────────────┼───────────┼───────────┤
+│ start          │          0          │    —      │     ✓     │
+│ fast_junction  │          1          │   start   │     ✗     │
+│ fast_path      │       9999999       │    ?      │     ✗     │
+│ slow_path1     │          2          │   start   │     ✗     │
+│ slow_path2     │       9999999       │    ?      │     ✗     │
+│ merge_point    │       9999999       │    ?      │     ✗     │
+│ goal           │       9999999       │    ?      │     ✗     │
+└────────────────┴─────────────────────┴───────────┴───────────┘
+```
+
+**Step 2 — Pick the UNPROCESSED zone with the SMALLEST distance:**
+
+That is `fast_junction` (distance 1). Look at its neighbors:
+- `start`: already processed → skip
+- `fast_path`: 1 + 1 = 2 → better than 9999999 → **update!**
+- `slow_path1`: 1 + 1 = 2 → NOT better than 2 (same) → skip
+
+Mark `fast_junction` as processed.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│      Zone      │ Distance from start │ Came from │ Processed │
+├────────────────┼─────────────────────┼───────────┼───────────┤
+│ start          │          0          │    —      │     ✓     │
+│ fast_junction  │          1          │   start   │     ✓     │
+│ fast_path      │          2          │fast_junc. │     ✗     │
+│ slow_path1     │          2          │   start   │     ✗     │
+│ slow_path2     │       9999999       │    ?      │     ✗     │
+│ merge_point    │       9999999       │    ?      │     ✗     │
+│ goal           │       9999999       │    ?      │     ✗     │
+└────────────────┴─────────────────────┴───────────┴───────────┘
+```
+
+**Step 3 — Unprocessed with smallest distance:**
+
+Two zones have distance 2: `fast_path` and `slow_path1`.
+We pick `fast_path` (the first one we find).
+
+Neighbors of `fast_path`:
+- `fast_junction`: processed → skip
+- `merge_point`: 2 + 1 = 3 → better than 9999999 → **update!**
+
+Mark `fast_path` as processed.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│      Zone      │ Distance from start │ Came from │ Processed │
+├────────────────┼─────────────────────┼───────────┼───────────┤
+│ start          │          0          │    —      │     ✓     │
+│ fast_junction  │          1          │   start   │     ✓     │
+│ fast_path      │          2          │fast_junc. │     ✓     │
+│ slow_path1     │          2          │   start   │     ✗     │
+│ slow_path2     │       9999999       │    ?      │     ✗     │
+│ merge_point    │          3          │ fast_path │     ✗     │
+│ goal           │       9999999       │    ?      │     ✗     │
+└────────────────┴─────────────────────┴───────────┴───────────┘
+```
+
+**Step 4 — Unprocessed with smallest distance: `slow_path1` (2).**
+
+Neighbors of `slow_path1`:
+- `start`: processed → skip
+- `fast_junction`: processed → skip
+- `slow_path2`: 2 + 2 = 4 → better than 9999999 → **update!**
+
+Mark `slow_path1` as processed.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│      Zone      │ Distance from start │ Came from │ Processed │
+├────────────────┼─────────────────────┼───────────┼───────────┤
+│ start          │          0          │    —      │     ✓     │
+│ fast_junction  │          1          │   start   │     ✓     │
+│ fast_path      │          2          │fast_junc. │     ✓     │
+│ slow_path1     │          2          │   start   │     ✓     │
+│ slow_path2     │          4          │slow_path1 │     ✗     │
+│ merge_point    │          3          │ fast_path │     ✗     │
+│ goal           │       9999999       │    ?      │     ✗     │
+└────────────────┴─────────────────────┴───────────┴───────────┘
+```
+
+**Step 5 — Unprocessed with smallest distance: `merge_point` (3).**
+
+Neighbors of `merge_point`:
+- `fast_path`: processed → skip
+- `slow_path2`: 3 + 2 = 5 → NOT better than 4 → skip
+- `goal`: 3 + 1 = 4 → better than 9999999 → **update!**
+
+Mark `merge_point` as processed.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│      Zone      │ Distance from start │ Came from │ Processed │
+├────────────────┼─────────────────────┼───────────┼───────────┤
+│ start          │          0          │    —      │     ✓     │
+│ fast_junction  │          1          │   start   │     ✓     │
+│ fast_path      │          2          │fast_junc. │     ✓     │
+│ slow_path1     │          2          │   start   │     ✓     │
+│ slow_path2     │          4          │slow_path1 │     ✗     │
+│ merge_point    │          3          │ fast_path │     ✓     │
+│ goal           │          4          │merge_pt.  │     ✗     │
+└────────────────┴─────────────────────┴───────────┴───────────┘
+```
+
+**Step 6 — Unprocessed with smallest distance: `goal` (4).**
+
+We picked `goal` — that is our destination! **We stop.**
+
+**Step 7 — Reconstruct the path:**
+
+Start at `goal` and follow the breadcrumbs backward:
+
+```
+goal  ← came from "merge_point"
+  merge_point  ← came from "fast_path"
+    fast_path  ← came from "fast_junction"
+      fast_junction  ← came from "start"
+        start  ← this is the start!
+```
+
+Now reverse the list:
+
+```
+start → fast_junction → fast_path → merge_point → goal
+```
+
+**That is the shortest path in turns!**
+
+### 6.4 The key tools in Dijkstra
+
+| Tool | Type | What it does |
+|------|------|--------------|
+| `graph` | `dict[str, list[tuple[str, int]]]` | The adjacency list: from each zone, who are its neighbors and what is the cost? |
+| `distances` | `dict[str, int]` | The best known distance (in turns) from `start` to each zone |
+| `previous` | `dict[str, str \| None]` | For each zone, which zone did we come from? Used to reconstruct the path |
+| `unvisited` | `list[str]` | Zones that have not been fully processed yet |
+| `track_zone` | `str` | The unprocessed zone with the smallest distance — the one we are processing right now |
+
+### 6.5 Why Dijkstra beats "pick the cheapest neighbor"
+
+A naive approach (greedy) always picks the cheapest next step.
+This fails on maps like this one:
+
+```
+         ┌─ A (cost 1) ── dead_end (cost 1)
+start ───┤
+         └─ B (cost 2) ── goal (cost 1)
+```
+
+**Greedy:**
+1. From `start`, neighbors are `A`(1) and `B`(2). Pick `A` (cheaper).
+2. From `A`, the only neighbor is `dead_end`(1). Go there.
+3. From `dead_end`, no neighbors. **Stuck.**
+
+**Dijkstra:**
+1. From `start`, discover `A=1` and `B=2`. Process `start`.
+2. Pick `A` (smallest unprocessed: 1). Discover `dead_end=2`. Process `A`.
+3. Pick `B` (smallest unprocessed: 2). Discover `goal=3`. Process `B`.
+4. Pick `goal` (3). **Arrived!**
+
+The difference: Dijkstra maintains a **global view** (the distance table),
+so it does not commit to a path until it has explored all alternatives.
+
+---
+
+## 7. The Simulator (moving the drones)
+
+`not yet fully implemented`
+
+The simulation will work like this:
+
+1. **Init:** Drones are created at the start zone with their paths
+   pre-calculated by Dijkstra.
+
+2. **Each turn:** Every drone that has not been delivered yet can:
+   - Move one step along its path (cost depends on destination zone type)
+   - Stay in place (if movement is blocked)
+
+3. **Capacity rules (from the subject):**
+   - Each zone has a `max_drones` limit (default: 1)
+   - Each connection has a `max_link_capacity` limit (default: 1)
+   - Drones leaving a zone free up capacity in the same turn
+   - Drones entering a restricted zone take 2 turns (they occupy
+     the connection while in transit)
+
+4. **Output format (from the subject):**
+   ```
+   D1-roof1 D2-corridorA
+   D1-roof2 D2-tunnelB
+   D1-goal D2-goal
+   ```
+
+5. **End condition:** All drones have reached the end zone.
+
+---
+
+## 8. Subject Specifications Summary
+
+### Required Makefile rules
+
+| Rule | Command |
+|------|---------|
+| install | Install dependencies (uv, pip, pipx, etc.) |
+| run | Execute main.py with a map argument |
+| debug | Execute main.py with pdb |
+| clean | Remove caches (__pycache__, .mypy_cache, *.pyc) |
+| lint | flake8 . + mypy . with specific flags |
+| lint-strict (optional) | flake8 . + mypy . --strict |
+
+### Movement rules
+
+- normal: 1 turn
+- restricted: 2 turns (drone is "in transit" on the connection)
+- priority: 1 turn (should be preferred by pathfinding)
+- blocked: Cannot be entered
+
+### Occupancy rules
+
+- Default zone capacity: 1 drone at a time
+- max_drones=N overrides this
+- start zone: all drones can start there (special exception)
+- end zone: multiple drones can arrive (special exception)
+- Connection capacity: max_link_capacity limits simultaneous crossings
+
+### Map validation rules
+
+- First line: `nb_drones: <positive integer>`
+- Exactly one start_hub and one end_hub
+- All zone names must be unique
+- Zone names cannot contain dashes or spaces
+- Connection zones must already exist
+- No duplicate connections (a-b = b-a)
+- Zone types: normal, blocked, restricted, priority
+- Colors: any single-word string
+- max_drones and max_link_capacity: positive integers
+
+### Simulation output format
+
+- One line per turn
+- Each line lists all drone movements separated by spaces
+- Format: `D<ID>-<zone>` or `D<ID>-<connection>` (for in-transit drones)
+- Drones that do not move are omitted
+- Delivered drones are no longer tracked
+
+---
+
+## 9. Draft Notes
+
+```
+# Resources:
+
+https://es.wikipedia.org/wiki/Teor%C3%ADa_de_grafos
+https://www.datacamp.com/tutorial/python-uv
+
 
 EXTRACCION DE UN .tar.gz
 
@@ -123,3 +637,4 @@ checking_data(data):
     if end_count != 1:
         error missing/duplicated end_hub
 ```
+

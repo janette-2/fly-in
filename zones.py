@@ -2,47 +2,61 @@ from errors import Parser_Error
 
 
 class Zones():
-    """Represents a zone (hub) in the drone network.
+    """Stores everything about one zone (hub) in the drone network.
 
-    Stores the zone's identity, coordinates, role (start/hub/end),
-    and parsed metadata (zone type, color, max_drones).
+    A zone is a node in the graph. Each zone has a name, coordinates
+    (x, y), a role (start / hub / end), and optional metadata that
+    tells us its type (normal, blocked, restricted, priority),
+    its color (for terminal display), and how many drones can be
+    inside it at the same time (max_drones).
+
+    The metadata is written in the map file like this:
+        hub: roof1 3 4 [zone=restricted color=red max_drones=2]
     """
 
     def __init__(self, name: str, x: int, y: int, metadata: str,
                  role: str, line_n: int = 0) -> None:
-        """Initializes a Zone with raw data and parses its metadata.
+        """Creates a zone and immediately parses its metadata.
 
         Args:
-            name: Unique zone identifier.
-            x: X coordinate.
-            y: Y coordinate.
-            metadata: Raw metadata string (e.g. "[zone=restricted color=red]").
-            role: Zone role — "start", "hub", or "end".
-            line_n: Source line number for error reporting.
+            name: Unique name of the zone (e.g. "roof1", "goal").
+            x: X coordinate on the map grid.
+            y: Y coordinate on the map grid.
+            metadata: Raw text inside the brackets, or empty string.
+                Example: "[zone=priority color=blue max_drones=2]".
+            role: What this zone is — "start", "hub", or "end".
+            line_n: Line number in the map file (used for errors).
         """
         self.name = name
         self.x = x
         self.y = y
         self.role = role
         self.metadata = metadata
-        self.zone = "normal"
-        self.color = ""
-        self.max_drones = 1
+        self.zone = "normal"       # default type
+        self.color = ""             # no color by default
+        self.max_drones = 1         # default: only 1 drone at a time
         self._parser_metadata(metadata, line_n)
 
     def _parser_metadata(self, metadata: str, line_n: int) -> None:
-        """Parses and validates the zone metadata string.
+        """Reads the bracketed metadata and sets zone attributes.
 
-        Supported keys: zone, color, max_drones.
-        Unknown keys are silently ignored.
-        Raises Parser_Error on invalid format or values.
+        The metadata looks like:  [zone=restricted color=red max_drones=3]
+        This method splits it into key=value pairs and applies them.
+
+        Rules from the subject:
+        - zone must be one of: normal, blocked, restricted, priority
+        - color can be any single word (no spaces)
+        - max_drones must be a positive integer
+        - Unknown keys are silently ignored (they might be for future use)
+        - Nested brackets are not allowed
 
         Args:
-            metadata: Raw metadata string (e.g. "[zone=priority color=blue]").
-            line_n: Source line number for error reporting.
+            metadata: The raw bracket string,
+                e.g. "[zone=priority color=blue]".
+            line_n: Line number for error messages.
 
         Raises:
-            Parser_Error: If metadata syntax is invalid, zone type is unknown,
+            Parser_Error: If the syntax is wrong, zone type is unknown,
                 or max_drones is not a positive integer.
         """
         if not metadata or metadata == "[]":
@@ -63,7 +77,7 @@ class Zones():
                                    f"Invalid metadata format: '{item}'")
             key, val = parts
             if key not in categories:
-                continue
+                continue  # Skip not defined tags
             if key == "zone":
                 if val not in ["normal", "blocked", "restricted", "priority"]:
                     raise Parser_Error(line_n,

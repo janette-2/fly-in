@@ -1,5 +1,6 @@
 import sys
-from parser import Parser_Error, MapParser
+from errors import Parser_Error
+from parser import MapParser
 
 
 def main() -> int:

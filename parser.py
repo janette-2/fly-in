@@ -298,10 +298,10 @@ class MapParser():
         Raises:
             Parser_Error: If any validation constraint is violated.
         """
-        name, x, y, metadata = data_tuple
+        name, x_str, y_str, metadata = data_tuple
         try:
-            x = int(x)
-            y = int(y)
+            x = int(x_str)
+            y = int(y_str)
         except ValueError:
             raise Parser_Error(data_n, "Invalid coordinates of the hub, "
                                "the given values to x or y are not an int")

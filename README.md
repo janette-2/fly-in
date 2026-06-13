@@ -1,10 +1,75 @@
 # fly-in
 
-# Resources:
+Simulador de rutas de drones con parseo de mapas.
 
-https://es.wikipedia.org/wiki/Teor%C3%ADa_de_grafos
-https://www.datacamp.com/tutorial/python-uv
+## Requisitos
 
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/) — gestor de paquetes que aísla las dependencias sin contaminar el entorno del sistema.
+
+## Makefile
+
+| Target         | Descripción |
+|----------------|-------------|
+| `make` / `make all` | Ejecuta `lint` (target por defecto). |
+| `make install` | Instala `flake8` y `mypy` con `uv tool install` en entornos aislados. |
+| `make run MAP=<archivo>` | Ejecuta el simulador con el mapa indicado. Si no se pasa `MAP`, usa `maps/medium/03_priority_puzzle.txt`. |
+| `make debug MAP=<archivo>` | Ejecuta el simulador con `pdb` para depuración paso a paso. |
+| `make clean` | Elimina `__pycache__`, `.mypy_cache`, `.pytest_cache` y archivos `*.pyc`. |
+| `make lint` | Ejecuta `flake8 .` y `mypy .` con los flags obligatorios del subject. |
+| `make lint-strict` | Ejecuta `flake8 .` y `mypy . --strict` (recomendado para mayor rigor). |
+
+### ¿Por qué uv?
+
+[uv](https://docs.astral.sh/uv/) es un gestor de paquetes y proyectos de Python escrito en Rust. Es compatible con `pip` y `pipx` pero mucho más rápido y con varias ventajas:
+
+**Aislamiento:** `uv tool install` instala herramientas (como `flake8` y `mypy`) en entornos virtuales propios dentro de `~/.local/share/uv/tools/`. Cada herramienta vive en su propio directorio sin depender del Python del sistema.
+
+**No contamina el sistema:** A diferencia de `pip install` (que instala en site-packages del sistema) o `pip install --user` (que instala en site-packages del usuario), uv no escribe ni modifica ninguna ruta de Python. Tampoco requiere `--break-system-packages`, una bandera peligrosa que desactiva la protección PEP 668 y puede romper el sistema.
+
+**Idempotente con `--force`:** Si ya tienes la herramienta instalada, `uv tool install --force` la reinstala limpiamente en su entorno aislado sin dejar residuos ni conflictos de版本.
+
+**Rapidez:** Al estar escrito en Rust, uv resuelve dependencias e instala paquetes entre 10x y 100x más rápido que `pip`, especialmente útil en proyectos grandes o CI.
+
+**Fácil de instalar:**
+```sh
+# Con pipx
+pipx install uv
+
+# O directo (recomendado)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+**Para este proyecto:** Ejecutando `make install` se instalan `flake8` y `mypy` con uv en sus entornos aislados. Los binarios quedan disponibles en `~/.local/bin/` y se pueden usar directamente como `flake8 .` o `mypy .`. Si en algún momento quieres desinstalarlos: `uv tool uninstall flake8`.
+
+### Uso rápido
+
+```sh
+# Instalar herramientas de linting
+make install
+
+# Verificar el proyecto
+make
+
+# Ejecutar con un mapa específico
+make run MAP=maps/easy/01_simple.txt
+
+# Limpiar cachés
+make clean
+```
+
+## Extracción de mapas
+
+```sh
+tar -xzf maps.tar.gz
+```
+
+## Notas
+
+- `Parser_Error` es el error genérico de parseo. Captura `IndexError` cuando el mapa no tiene suficientes datos.
+- Para que el shell reciba el código de salida correcto: `raise SystemExit(main())`
+
+## En sucio
 
 EXTRACCION DE UN .tar.gz
 

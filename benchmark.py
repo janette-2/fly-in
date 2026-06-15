@@ -31,7 +31,7 @@ def run_map(path: str) -> int:
         [sys.executable, "main.py", path],
         capture_output=True, text=True,
     )
-    lines = [l for l in result.stdout.split("\n") if l.strip()]
+    lines = [line for line in result.stdout.split("\n") if line.strip()]
     return len(lines)
 
 
@@ -49,7 +49,8 @@ def main() -> int:
             status = "✅" if turns <= target else "❌"
             if turns > target:
                 all_pass = False
-            print(f"  {status} {filename:<40} {turns:>3} turns  (target ≤{target})")
+            print(f"  {status} {filename:<40} {turns:>3}"
+                  f" turns  (target ≤{target})")
 
     print(f"\n{'=' * 50}")
     if all_pass:

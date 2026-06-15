@@ -5,20 +5,12 @@ from simulator import Simulation
 
 
 def main() -> int:
-    """Entry point for the fly-in drone simulator.
+    """Entry point for the drone simulator.
 
-    Usage:
-        python3 main.py <path_to_map_file.txt>
-
-    Steps:
-    1. Reads the map file path from the command line.
-    2. Creates a MapParser and parses the map.
-    3. Creates a Simulation (which builds the graph and finds paths).
-    4. (Future) Runs the simulation turn by turn.
-    5. Prints the movement output.
+    Reads a map file, parses it, and runs the simulation.
 
     Returns:
-        0 on success, 1 on error (wrong arguments or parsing failure).
+        0 on success, 1 on error.
     """
 
     if (len(sys.argv) != 2):

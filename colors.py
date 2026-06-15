@@ -1,8 +1,4 @@
-"""ANSI color codes for terminal output.
-
-Each zone can declare a color in its metadata (e.g. color=green).
-This module maps those names to ANSI escape sequences.
-"""
+"""ANSI colour codes for terminal output."""
 
 COLOR_MAP = {
     "green": "\033[32m",
@@ -20,6 +16,17 @@ RESET = "\033[0m"
 
 
 def colorize(text: str, color_name: str) -> str:
+    """Wraps text in ANSI colour codes for terminal display.
+
+    Args:
+        text: The string to colour.
+        color_name: A colour name ("red", "green", "blue", etc.),
+            case-insensitive.
+
+    Returns:
+        The coloured string with ANSI codes, or the original text
+        if the colour is unknown.
+    """
     code = COLOR_MAP.get(color_name.lower())
     if code is None:
         return text

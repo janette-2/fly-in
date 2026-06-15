@@ -4,30 +4,20 @@ from connections import Connections
 
 
 class MapParser():
-    """Reads a map file, cleans, validates, and stores the result.
+    """Reads, cleans, validates, and stores a drone network map.
 
-    The map file describes a drone network. It looks like this:
+    The map file describes zones and connections. This class
+    processes it into dictionaries of Zone and Connection objects
+    ready for the simulator.
 
-        nb_drones: 5
-        start_hub: start 0 0 [color=green max_drones=4]
-        hub: fast_path 2 0 [zone=priority color=blue]
-        end_hub: goal 4 0 [color=green max_drones=4]
-        connection: start-fast_path
-        connection: fast_path-goal
-
-    This class:
-    1. Reads the file
-    2. Removes comments (#), empty lines, and newline characters
-    3. Validates every line against the subject specification
-    4. Builds dictionaries of Zone and Connection objects
-    5. These dictionaries are used by the simulator
+    Args:
+        map_path: Path to a .txt map file.
     """
 
     def __init__(self, map_path: str) -> None:
-        """Prepares the parser but does NOT parse yet.
+        """Initializes the parser.
 
-        You must call cleaned_map() and then checking_data()
-        separately.
+        Call cleaned_map() then checking_data() to parse.
 
         Args:
             map_path: Path to a .txt map file.
@@ -40,7 +30,7 @@ class MapParser():
         self.connections: dict[tuple[str, str], Connections] = {}
 
     def _read_map(self) -> list[tuple[int, str]]:
-        """Opens the file and returns every line with its line number.
+        """Reads the file and returns each line with its line number.
 
         Returns:
             List of (line_number, line_text). Line numbers start at 1.
@@ -55,15 +45,13 @@ class MapParser():
 
     def _clean_comments(self, data: list[tuple[int, str]]
                         ) -> list[tuple[int, str]]:
-        """Removes lines that start with '#'.
-
-        The subject allows comments in map files. They are ignored.
+        """Removes lines starting with '#'.
 
         Args:
             data: List of (line_number, line) tuples.
 
         Returns:
-            The same list but without any comment lines.
+            List without comment lines.
         """
         no_comments = []
         for line_n, line in data:
@@ -74,13 +62,13 @@ class MapParser():
 
     def _clean_next_line(self, data: list[tuple[int, str]]
                          ) -> list[tuple[int, str]]:
-        """Removes the trailing newline character (\\\\n) from every line.
+        """Strips the trailing newline from every line.
 
         Args:
             data: List of (line_number, line) tuples.
 
         Returns:
-            List with the \\\\n stripped from each line text.
+            List with newlines removed from each line text.
         """
         no_next_line = []
         for line_n, line in data:
@@ -90,13 +78,13 @@ class MapParser():
 
     def _clean_empty_lines(self, data: list[tuple[int, str]]
                            ) -> list[tuple[int, str]]:
-        """Removes lines that are completely empty after cleaning.
+        """Removes empty lines from the data.
 
         Args:
             data: List of (line_number, line) tuples.
 
         Returns:
-            List without any empty-string lines.
+            List without empty lines.
         """
         no_empty_lines = []
         for line_n, line in data:
@@ -106,15 +94,10 @@ class MapParser():
         return no_empty_lines
 
     def cleaned_map(self) -> list[tuple[int, str]]:
-        """Reads the file and runs all three cleaning steps.
+        """Reads and cleans the map file.
 
-        Cleaning order:
-        1. Remove comments (# lines)
-        2. Strip \\\\n characters
-        3. Remove empty lines
-
-        Original line numbers are kept so error messages can point
-        to the right line in the original file.
+        Removes comments, newlines, and empty lines while preserving
+        original line numbers for error messages.
 
         Returns:
             Cleaned list of (line_number, line_text).
@@ -126,26 +109,17 @@ class MapParser():
         return data_cleaned
 
     def checking_data(self, data: list[tuple[int, str]]) -> None:
-        """Validates every line and builds the internal data structures.
+        """Validates all lines and builds internal data structures.
 
-        This is the main validation method. It reads the cleaned lines
-        one by one and decides what to do based on the prefix:
-
-        - nb_drones:  <--- first line, required
-        - start_hub:  <--- exactly one
-        - hub:        <--- zero or more
-        - end_hub:    <--- exactly one
-        - connection: <--- zero or more
-
-        After all lines are processed, it checks that there is exactly
-        one start_hub and one end_hub.
+        Processes nb_drones, start_hub, hub, end_hub, and connection
+        lines. Ensures exactly one start and one end hub exist.
 
         Args:
             data: Cleaned list of (line_number, line_text).
 
         Raises:
             Parser_Error: If any line is invalid or the map structure
-                (exactly one start and one end) is violated.
+                is violated.
         """
         self._validate_nb_drones(data[0])
 
@@ -182,23 +156,14 @@ class MapParser():
                            ) -> tuple[str, str, str, str]:
         """Splits a hub line into name, x, y, and optional metadata.
 
-        A hub line looks like one of these:
-
-            start_hub: start 0 0 [color=green max_drones=4]
-            hub: roof1 3 4 [zone=restricted color=red]
-            end_hub: goal 10 10
-
-        This method extracts the four parts regardless of whether
-        metadata is present or not.
-
         Args:
             data_n: Line number for error messages.
             data_content: The full raw line.
             prefix: "start_hub:", "hub:", or "end_hub:".
 
         Returns:
-            Tuple of (name, x_str, y_str, metadata_string).
-            metadata_string is "" if no brackets were found.
+            Tuple of (name, x_str, y_str, metadata). metadata is ""
+            if no brackets were found.
 
         Raises:
             Parser_Error: If the line structure is wrong.
@@ -245,21 +210,13 @@ class MapParser():
                                   ) -> tuple[str, str, str]:
         """Splits a connection line into zone1, zone2, and metadata.
 
-        A connection line looks like:
-
-            connection: start-fast_path
-            connection: merge_point-goal [max_link_capacity=2]
-
-        The two zone names are separated by a dash. The subject
-        forbids dashes in zone names, so this is unambiguous.
-
         Args:
             data_n: Line number for error messages.
             data_content: The full raw line.
             prefix: "connection:".
 
         Returns:
-            Tuple of (zone1, zone2, metadata_string).
+            Tuple of (zone1, zone2, metadata).
 
         Raises:
             Parser_Error: If the structure is wrong.
@@ -292,10 +249,7 @@ class MapParser():
         return tup_data
 
     def _validate_nb_drones(self, data: tuple[int, str]) -> None:
-        """Checks that the first line is 'nb_drones: <positive integer>'.
-
-        The subject requires the map to start with this line.
-        The number of drones must be a positive integer.
+        """Checks the first line is 'nb_drones: <positive integer>'.
 
         Args:
             data: Tuple of (line_number, line_text).
@@ -326,21 +280,13 @@ class MapParser():
 
     def _validate_hub(self, role: str, data_n: int,
                       data_tuple: tuple[str, str, str, str]) -> None:
-        """Validates a zone and stores it.
-
-        Checks performed:
-        - Coordinates must be valid integers.
-        - Zone name must be unique (no duplicates).
-        - Zone name cannot contain dashes or spaces.
-        - There can only be one start_hub and one end_hub.
-
-        If everything passes, a Zones object is created and stored
-        in self.zones.
+        """Validates a zone line and stores it as a Zones object.
 
         Args:
             role: "start", "hub", or "end".
             data_n: Line number for error messages.
-            data_tuple: (name, x_str, y_str, metadata) from _parse_config_hubs.
+            data_tuple: (name, x_str, y_str, metadata) from
+                _parse_config_hubs.
 
         Raises:
             Parser_Error: If any validation fails.
@@ -379,15 +325,7 @@ class MapParser():
 
     def _validate_connection(self, data_n: int,
                              data_tuple: tuple[str, str, str]) -> None:
-        """Validates a connection and stores it.
-
-        Checks performed:
-        - Both referenced zones must already exist.
-        - A zone cannot connect to itself.
-        - Duplicate connections (a-b and b-a) are rejected.
-
-        If everything passes, a Connections object is stored in
-        self.connections.
+        """Validates a connection line and stores a Connections object.
 
         Args:
             data_n: Line number for error messages.

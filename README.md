@@ -1,3 +1,5 @@
+_This project has been created as part of the 42 curriculum by janrodri._
+
 # fly-in
 
 A drone routing simulator. Drones navigate through a network of zones
@@ -22,6 +24,8 @@ start zone to the end zone in as few turns as possible.
 7. [The Simulator (moving the drones)](#7-the-simulator-moving-the-drones)
 8. [Subject Specifications Summary](#8-subject-specifications-summary)
 9. [Draft Notes](#9-draft-notes)
+10. [Testing & Benchmarks](#10-testing--benchmarks)
+11. [Resources](#11-resources)
 
 ---
 
@@ -497,16 +501,14 @@ so it does not commit to a path until it has explored all alternatives.
 
 ## 7. The Simulator (moving the drones)
 
-`not yet fully implemented`
-
-The simulation will work like this:
+The simulation engine moves all drones from start to end turn by turn.
 
 1. **Init:** Drones are created at the start zone with their paths
    pre-calculated by Dijkstra.
 
-2. **Each turn:** Every drone that has not been delivered yet can:
-   - Move one step along its path (cost depends on destination zone type)
-   - Stay in place (if movement is blocked)
+2. **Each turn:** Every undelivered drone evaluates one step along its path.
+   Movement cost depends on the destination zone type (1 turn for normal/priority,
+   2 turns for restricted).
 
 3. **Capacity rules (from the subject):**
    - Each zone has a `max_drones` limit (default: 1)
@@ -524,34 +526,36 @@ The simulation will work like this:
 
 5. **End condition:** All drones have reached the end zone.
 
-### Loop structure (turn engine)
+### Algorithm: four-phase turn loop
+
+Each turn runs four phases in sequence:
 
 ```
 fly_simulation()
 │
-├── Inicializar: occupation, shift
+├── Init: occupation counters, shift=0
 │
-└── while not all delivered:              ← CADA TURNO
+└── while not all delivered:              ← EACH TURN
     │
-    ├── Inicializar turno: output, to_enter,
+    ├── Init turn: output, to_enter,
     │   to_leave, used_connections, attempted_moves
     │
-    ├── for drone in drones:              ← F1 + F2 juntos
+    ├── for drone in drones:              ← PHASE 1 + 2
     │   │
     │   └── if not drone.delivered:
     │       │
-    │       ├── if drone.in_transit:      ← FASE 1: llegan los que volaban
-    │       │   └── to_enter[], deliver, output
+    │       ├── if drone.in_transit:      ← PHASE 1: arrivals
+    │       │   └── to_enter[zone]++, deliver if goal, output
     │       │
     │       └── if not in_transit and
-    │           not moved_in_shift:       ← FASE 2: recoger intenciones
+    │           not moved_in_shift:       ← PHASE 2: collect intents
     │               └── attempted_moves.append()
     │
-    ├── for intento in attempted_moves:   ← FASE 3: validar capacidad
-    │   └── if zona_libre and conex_libre:
-    │       └── aplicar movimiento
+    ├── for intent in attempted_moves:    ← PHASE 3: validate capacity
+    │   └── if zone_free and conn_free:
+    │       └── apply movement
     │
-    ├── for zone in zones:                ← FASE 4: actualizar ocupaciones
+    ├── for zone in zones:                ← PHASE 4: update occupations
     │   └── occupation[zone] += to_enter - to_leave
     │
     ├── if output: print
@@ -560,8 +564,33 @@ fly_simulation()
         └── reset moved_in_shift
 ```
 
-**Regla de sangrado:** cada `for` o `if` duplica la indentación.
-La Fase 3 está al mismo nivel que el `for drone` (no dentro).
+**Indentation rule:** each `for` or `if` doubles the indent level.
+Phase 3 is at the **same level** as the `for drone` loop (not nested inside it).
+
+### Occupancy projection (capacity check)
+
+When a drone wants to move into a zone, the engine checks:
+
+```
+projected = occupation[zone] + to_enter[zone] - to_leave[zone]
+```
+
+If `projected < max_drones[zone]` (or the zone is start/end), the move is allowed.
+This guarantees no zone ever exceeds its capacity within a single turn.
+
+### Visual representation
+
+Zone names in the simulation output are colorized using ANSI escape codes.
+Each zone declares an optional `color=...` in the map file. The `colors.py`
+module maps common color names (red, green, blue, cyan, yellow, magenta,
+orange, etc.) to their terminal codes. Unknown colors fall back to plain text.
+
+Example:
+```
+D1-goal D2-corridorA
+```
+The zone names appear in their declared colors. This helps track which drone
+goes where at a glance, especially on complex maps with many zones.
 
 ### The building analogy (English)
 
@@ -649,7 +678,7 @@ GROUND FLOOR (level 0):
 
 ---
 
-## 10. Testing & Benchmarks
+## 9. Testing & Benchmarks
 
 ### How to run a single map
 
@@ -723,154 +752,19 @@ echo "challenger: $(python3 main.py maps/challenger/01_the_impossible_dream.txt 
 
 ---
 
-## 9. Draft Notes
+## 10. Resources
 
-```
-# Resources:
+- [Graph theory (Wikipedia)](https://es.wikipedia.org/wiki/Teor%C3%ADa_de_grafos)
+- [uv package manager](https://docs.astral.sh/uv/)
+- [ANSI escape codes](https://en.wikipedia.org/wiki/ANSI_escape_code) — terminal colors
+- [Dijkstra's algorithm](https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm) — shortest path on weighted graphs
 
-https://es.wikipedia.org/wiki/Teor%C3%ADa_de_grafos
-https://www.datacamp.com/tutorial/python-uv
+**AI usage:** This project was developed with AI assistance for:
+- Code structure and type annotations
+- Algorithm design (turn engine + occupancy projection)
+- Documentation and README writing
+- Debugging and testing against benchmark maps
 
+All AI-generated code was reviewed, understood, and validated by the author before submission.
 
-EXTRACCION DE UN .tar.gz
-
-tar -xzf maps.tar.gz
-
-CREACION DE EXCEPCION:
-- Parser_Error (Error generico de parseo)
-- DEBE CAPTURAR INDEXERROR, para cuando va a buscar un dato en el texto y el mapa pasado no tiene la cantidad de contenido necesario para llegar a la posicion del dato necesario.
-USO DE SystemExit():
-```
-Qué hace \SystemExit(main())``
-
-main() devuelve un entero (0, 1, 2, ...).
-raise SystemExit(codigo) termina el proceso con ese código.
-Es la forma estándar en Python CLI para que el shell reciba el exit code correcto.
-Sin eso, si solo llamas main(), el valor que devuelve se ignora y el proceso suele terminar en 0.
-```
-
-Modificacion codigo en evaluacion: Añadir a los logs, al final Zone: drones/zones es decir, cantidad de drones totales/ zonas  ?? - capacity-info
-
-# Parser dispatcher (modelo selector categorias):
-
-```
-checking_data(data):
-    validate_nb_drones(data[0])
-
-    start_count = 0
-    end_count = 0
-
-    for line_no, line in data[1:]:
-        if line startswith "start_hub:":
-            start_count += 1
-            validate_start_hub(line_no, line)
-
-        elif line startswith "end_hub:":
-            end_count += 1
-            validate_end_hub(line_no, line)
-
-        elif line startswith "hub:":
-            validate_hub(line_no, line)
-
-        elif line startswith "connection:":
-            validate_connection(line_no, line)
-
-        else:
-            error unknown line type
-
-    if start_count != 1:
-        error missing/duplicated start_hub
-
-    if end_count != 1:
-        error missing/duplicated end_hub
-```
-
-SIMULAR():
-    # Inicializar contadores de ocupación
-    ocupacion = {cada_zona: 0}
-    ocupacion[zona_start] = nb_drones  # todos empiegan ahí
-    
-    turno = 0
-    
-    REPETIR mientras no todos entregados:
-        turno += 1
-        output = []
-        
-        salen   = {zona: 0 para cada zona}
-        entran  = {zona: 0 para cada zona}
-        conexiones_usadas = {conexion: 0 para cada conexion}
-        
-        // ---- FASE 1: IN-TRANSIT (obligatorio) ----
-        PARA CADA dron NO entregado:
-            SI dron.in_transit:
-                dron.turns_remaining -= 1
-                SI turns_remaining == 0:
-                    zona_llegada = dron.path[dron.path_index + 1]
-                    entran[zona_llegada] += 1     // reservar llegada
-                    dron.current_zone = zona_llegada
-                    dron.path_index += 1
-                    dron.in_transit = False
-                    SI zona_llegada == end:
-                        dron.delivered = True
-                    output += "D{id}-{zona_llegada}"
-                    dron.ya_se_movio = True        // no puede moverse otra vez
-        
-        // ---- FASE 2: RECOGER INTENCIONES ----
-        movimientos_intentados = []
-        
-        PARA CADA dron NO entregado Y NO in_transit Y NO ya_se_movio:
-            siguiente = dron.path[dron.path_index + 1]
-            conexion = buscar_conexion(dron.current_zone, siguiente)
-            
-            coste = 1 si normal/priority, 2 si restricted
-            
-            movimientos_intentados += [
-                (dron, dron.current_zone, siguiente, conexion, coste)
-            ]
-        
-        // ---- FASE 3: VALIDAR Y APLICAR ----
-        PARA CADA (dron, origen, destino, conexion, coste) en movimientos_intentados:
-            // Proyección: ocupación del destino al final del turno
-            // = ocupacion_actual + entran - salen + este_dron
-            proyeccion = ocupacion[destino] + entran[destino] - salen[destino]
-            
-            SI destino == end O destino == start:
-                zona_libre = True
-            SINO:
-                zona_libre = (proyeccion < max_drones[destino])
-            
-            SI coste == 2:
-                zona_libre = True  // aún no llega, solo ocupa conexión
-            
-            conexion_libre = (conexiones_usadas[conexion]
-                              < max_link_capacity[conexion])
-            
-            SI zona_libre Y conexion_libre:
-                salen[origen] += 1
-                entran[destino] += 1       // para turno actual (coste 1)
-                                           // o para llegada futura (coste 2)
-                conexiones_usadas[conexion] += 1
-                dron.ya_se_movio = True
-                
-                SI coste == 2:
-                    dron.in_transit = True
-                    dron.turns_remaining = 1
-                    output += "D{id}-{origen}-{destino}"
-                SINO:
-                    dron.current_zone = destino
-                    dron.path_index += 1
-                    SI destino == end:
-                        dron.delivered = True
-                    output += "D{id}-{destino}"
-        
-        // ---- FASE 4: ACTUALIZAR OCUPACIONES ----
-        PARA CADA zona:
-            ocupacion[zona] += entran[zona] - salen[zona]
-        
-        SI output no vacío:
-            imprimir output.join(" ")
-        
-        // limpiar flag de movimiento para siguiente turno
-        PARA CADA dron:
-            dron.ya_se_movio = False
-
+---

@@ -1,21 +1,13 @@
 class Parser_Error(Exception):
-    """Exception raised when a map file contains invalid data.
+    """Raised when a map file contains invalid data.
 
-    This is the only custom exception in the project.
-    It is raised whenever the parser encounters something that
-    does not match the subject specification (wrong syntax,
-    missing data, invalid zone types, duplicate names, etc.).
-
-    Attributes:
-        line_n: Line number in the map file where the error was found.
-        msg: Human-readable description of what went wrong.
+    Args:
+        line_n: Line number where the error was found.
+        msg: Human-readable description of the problem.
     """
 
     def __init__(self, line_n: int, msg: str) -> None:
-        """Stores the line number and error message, then formats them.
-
-        The parent Exception class receives a string like:
-        "Error at line 12: Invalid zone type: 'super_fast'"
+        """Initializes the exception with a formatted error message.
 
         Args:
             line_n: Line number of the error (1-based).

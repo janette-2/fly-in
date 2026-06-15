@@ -3,29 +3,26 @@ from colors import colorize
 
 
 class Drone():
-    """Represents one drone in the simulation.
+    """Represents a single drone in the simulation.
 
-    Each drone has:
-    - A unique ID (1, 2, 3, ...)
-    - A planned path (list of zones to visit, from start to end)
-    - A current position (the zone it occupies right now)
-    - A delivered flag (True once it reaches the end zone)
+    Tracks the drone's ID, path, current position, and delivery
+    status. For restricted zones the drone also tracks transit
+    state (in_transit and turns_remaining).
 
-    For restricted zones (which take 2 turns to enter), the drone
-    also tracks whether it is "in transit" and how many turns
-    remain before it arrives.
+    Args:
+        drone_id: Unique identifier (1 for D1, 2 for D2, etc.).
+        path: Ordered list of zone names the drone follows.
+        current_zone: Zone the drone starts in.
     """
 
     def __init__(self, drone_id: int, path: list[str],
                  current_zone: str) -> None:
-        """Creates a drone and places it at the starting zone.
+        """Initializes the drone at the starting zone.
 
         Args:
-            drone_id: Unique number (1 for D1, 2 for D2, etc.).
-            path: Ordered list of zone names the drone will follow.
-                Example: ["start", "fast_path", "goal"].
-            current_zone: Name of the zone the drone starts in.
-                This is usually the start_hub name.
+            drone_id: Unique identifier (1 for D1, 2 for D2, etc.).
+            path: Ordered list of zone names the drone follows.
+            current_zone: Zone the drone starts in.
         """
         self.id = drone_id
         self.path: list[str] = path
@@ -40,27 +37,23 @@ class Drone():
 class Simulation():
     """Runs the turn-by-turn drone simulation.
 
-    The simulation receives a fully parsed map (via MapParser),
-    creates the drones, finds the shortest path for each one,
-    and then advances turn by turn until all drones reach the end.
+    Receives a parsed map, creates drones, finds shortest paths,
+    and advances until all drones reach the end.
 
-    The result is a sequence of movement lines like:
-        D1-fast_path D2-corridorA
-        D1-goal D2-tunnelB
+    Args:
+        parser: A MapParser that has already parsed and validated
+            a map file.
     """
 
     def __init__(self, parser: MapParser) -> None:
-        """Prepares the simulation.
+        """Initializes the simulation with parsed map data.
 
-        This does NOT run the simulation yet. It only:
-        - Stores the parsed map data
-        - Creates the drones with their paths pre-calculated
-
-        To actually run turns, call run() (not implemented yet).
+        Creates drones and pre-calculates their paths.
+        Call fly_simulation() to run turns.
 
         Args:
             parser: A MapParser that has already parsed and validated
-                a map file (checking_data() was called).
+                a map file.
         """
         self.parser = parser
         self.drones: list[Drone] = []
@@ -68,12 +61,10 @@ class Simulation():
         self._init_drones()
 
     def _init_drones(self) -> None:
-        """Finds start and end zones, then creates all drones.
+        """Creates all drones with pre-calculated optimal paths.
 
-        Each drone gets the optimal path calculated by _dijkstra().
-        All drones start at the start zone on turn 0.
-
-        The number of drones comes from the map's nb_drones line.
+        Each drone starts at the start zone. The number of drones
+        comes from the map's nb_drones line.
         """
         start = ""
         end = ""
@@ -90,47 +81,26 @@ class Simulation():
         self.fly_simulation(start, end)
 
     def zone_roles(self, role: str) -> int:
-        """Returns how many turns it takes to enter a zone type.
-
-        This is used by the pathfinding algorithm.
+        """Returns the turn cost to enter a zone type.
 
         Args:
-            role: One of "normal", "priority", "restricted".
+            role: "normal", "priority", or "restricted".
 
         Returns:
-            1 for normal and priority zones.
-            2 for restricted zones.
+            1 for normal/priority, 2 for restricted.
         """
         if role == "restricted":
             return 2
         return 1
 
     def _build_graph(self) -> dict[str, list[tuple[str, int]]]:
-        """Converts the map data into an adjacency list for pathfinding.
+        """Builds an adjacency list for pathfinding from map data.
 
-        The map data in the parser is split into two dictionaries:
-        - self.parser.zones (zone name → Zone object)
-        - self.parser.connections (zone pair → Connection object)
-
-        Pathfinding algorithms (like Dijkstra) need a different format:
-        they need to ask "from this zone, which neighbors can I visit
-        and what does it cost?".
-
-        This method builds exactly that:
-
-            {
-                "start": [("fast_path", 1), ("slow_path", 2)],
-                "fast_path": [("start", 1), ("goal", 1)],
-                ...
-            }
-
-        Each value is a list of (neighbor_name, cost_in_turns) tuples.
-        Blocked zones are NOT included as keys or as valid neighbors,
-        because drones cannot enter them.
+        Each key is a zone name, each value is a list of
+        (neighbor, movement_cost) pairs. Blocked zones are excluded.
 
         Returns:
-            A dictionary where every key is a zone name and every value
-            is a list of (neighbor, movement_cost) pairs.
+            Adjacency list dict.
         """
         zones_paths: dict[str, list[tuple[str, int]]] = {}
 
@@ -148,47 +118,15 @@ class Simulation():
         return zones_paths
 
     def _dijkstra(self, start: str, end: str) -> list[str]:
-        """Finds the cheapest path (fewest turns) from start to end.
-
-        This is the core pathfinding algorithm. It guarantees the
-        shortest path because all movement costs are positive (1 or 2).
-
-        **How it works (simple explanation):**
-
-        1. Start with a table that says:
-           - start zone = distance 0
-           - every other zone = distance "infinite" (we use 9999999)
-
-        2. Keep a list of zones we have not yet processed.
-
-        3. Each round, pick the unprocessed zone with the smallest
-           distance. This is the "best candidate" so far.
-
-        4. Look at every neighbor of this zone. For each neighbor,
-           calculate:  current_distance + cost_to_neighbor.
-           If this is smaller than the neighbor's known distance,
-           update the neighbor's distance and remember which zone
-           we came from.
-
-        5. Mark the current zone as processed (remove from unvisited).
-
-        6. Repeat until we process the end zone.
-
-        7. To get the final path, start at end and follow the
-           "which zone did I come from?" breadcrumbs back to start.
-           Then reverse the list.
-
-        Example:
-            _dijkstra("start", "goal")
-            → ["start", "fast_path", "goal"]
+        """Finds the shortest path from start to end using Dijkstra.
 
         Args:
             start: Name of the starting zone.
             end: Name of the destination zone.
 
         Returns:
-            An ordered list of zone names from start to end.
-            Returns an empty list if no path exists.
+            Ordered list of zone names from start to end.
+            Empty list if no path exists.
         """
         graph = self._build_graph()
         distances: dict[str, int] = {}
@@ -231,6 +169,15 @@ class Simulation():
         return path
 
     def fly_simulation(self, start: str, end: str) -> None:
+        """Runs the turn-by-turn simulation until all drones are delivered.
+
+        Each turn processes in-transit arrivals, collects intended
+        moves, validates them against capacities, and applies changes.
+
+        Args:
+            start: Name of the start zone.
+            end: Name of the end (goal) zone.
+        """
         # Zones Occupation counters - initialization
         occupation = {}
         for zone in self.parser.zones:
@@ -275,7 +222,8 @@ class Simulation():
                                           f"{colorize(arrival_zone,
                                                       self.parser.zones[
                                                           arrival_zone].color
-                                                      )}")
+                                                      )} "
+                                          )
                             drone.moved_in_shift = True
 
                     # Phase2 - COLLECT NEXT MOVEMENTS
@@ -357,7 +305,8 @@ class Simulation():
                                       f"{colorize(next_zone,
                                                   self.parser.zones[
                                                     next_zone].color
-                                                  )}")
+                                                  )}"
+                                      )
 
             # Phase4 - UPDATE PARAMETERS AFTER MOVEMENTS
 

@@ -696,35 +696,6 @@ Pipe through `wc -l` — each line is one turn:
 python3 main.py maps/hard/03_ultimate_challenge.txt | wc -l
 ```
 
-### Run all maps automatically with the benchmark tester
-
-```bash
-python3 benchmark.py
-```
-
-This runs every map, counts turns, compares against the target, and prints ✅ or ❌ for each one.
-
-### Run all maps manually (one-liners)
-
-```bash
-# Easy
-for m in maps/easy/*.txt; do
-  echo "$(basename $m): $(python3 main.py "$m" | wc -l) turns"
-done
-
-# Medium
-for m in maps/medium/*.txt; do
-  echo "$(basename $m): $(python3 main.py "$m" | wc -l) turns"
-done
-
-# Hard
-for m in maps/hard/*.txt; do
-  echo "$(basename $m): $(python3 main.py "$m" | wc -l) turns"
-done
-
-# Challenger (optional)
-echo "challenger: $(python3 main.py maps/challenger/01_the_impossible_dream.txt | wc -l) turns"
-```
 
 ### Performance benchmarks reference
 

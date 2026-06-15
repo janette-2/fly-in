@@ -3,6 +3,7 @@
 import subprocess
 import sys
 
+import pytest
 
 BENCHMARKS = {
     "easy": {
@@ -35,32 +36,21 @@ def run_map(path: str) -> int:
     return len(lines)
 
 
-def main() -> int:
-    all_pass = True
+test_cases = []
 
-    for category, maps in BENCHMARKS.items():
-        print(f"\n{'=' * 50}")
-        print(f"  {category.upper()}")
-        print(f"{'=' * 50}")
-
-        for filename, (drones, target) in maps.items():
-            path = f"maps/{category}/{filename}"
-            turns = run_map(path)
-            status = "✅" if turns <= target else "❌"
-            if turns > target:
-                all_pass = False
-            print(f"  {status} {filename:<40} {turns:>3}"
-                  f" turns  (target ≤{target})")
-
-    print(f"\n{'=' * 50}")
-    if all_pass:
-        print("  ✅ All benchmarks passed!")
-    else:
-        print("  ❌ Some benchmarks failed")
-    print(f"{'=' * 50}\n")
-
-    return 0 if all_pass else 1
+for category, maps in BENCHMARKS.items():
+    for filename, (drones, target) in maps.items():
+        path = f"maps/{category}/{filename}"
+        test_cases.append((path, target))
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+@pytest.mark.parametrize("path,target", test_cases)
+def test_benchmarks(path, target):
+    turns = run_map(path)
+
+# Final condition and error message in case of failure
+
+    assert turns <= target, (
+        f"{path}: obtuvo {turns} turnos "
+        f"(objetivo <= {target})"
+    )

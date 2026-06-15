@@ -524,6 +524,79 @@ The simulation will work like this:
 
 5. **End condition:** All drones have reached the end zone.
 
+### Loop structure (turn engine)
+
+```
+fly_simulation()
+│
+├── Inicializar: occupation, shift
+│
+└── while not all delivered:              ← CADA TURNO
+    │
+    ├── Inicializar turno: output, to_enter,
+    │   to_leave, used_connections, attempted_moves
+    │
+    ├── for drone in drones:              ← F1 + F2 juntos
+    │   │
+    │   └── if not drone.delivered:
+    │       │
+    │       ├── if drone.in_transit:      ← FASE 1: llegan los que volaban
+    │       │   └── to_enter[], deliver, output
+    │       │
+    │       └── if not in_transit and
+    │           not moved_in_shift:       ← FASE 2: recoger intenciones
+    │               └── attempted_moves.append()
+    │
+    ├── for intento in attempted_moves:   ← FASE 3: validar capacidad
+    │   └── if zona_libre and conex_libre:
+    │       └── aplicar movimiento
+    │
+    ├── for zone in zones:                ← FASE 4: actualizar ocupaciones
+    │   └── occupation[zone] += to_enter - to_leave
+    │
+    ├── if output: print
+    │
+    └── for drone in drones:
+        └── reset moved_in_shift
+```
+
+**Regla de sangrado:** cada `for` o `if` duplica la indentación.
+La Fase 3 está al mismo nivel que el `for drone` (no dentro).
+
+### The building analogy (English)
+
+Imagine your code is a **3-story building**. Each indentation level is a floor.
+
+```
+GROUND FLOOR (level 0):
+  while turn active:
+
+1ST FLOOR (level 1) ──────────────────────────
+  for drone:          ← collect, don't decide
+  ├── Phase 1: arrivals (if in_transit)
+  └── Phase 2: ask intent (append to list)
+
+  for intent:         ← review the FULL list ─┐  same floor,
+  └── Phase 3: validate capacity              │   NOT inside
+                                              │   the drone loop
+  for zone:
+  └── Phase 4: update counters
+
+  for drone:
+  └── reset flag
+
+2ND FLOOR (level 2) ──────────────────────────
+  if not delivered:
+    if in_transit:      ← Phase 1 logic
+    if can move:        ← Phase 2 logic
+
+3RD FLOOR (level 3) ──────────────────────────
+  attempted_moves.append(...)
+```
+
+**The golden rule:** `for drone` and `for intent` are on the **same floor** (same indentation). They run one after another, NOT nested. If Phase 3 were inside `for drone`, each drone would reprocess ALL previous intents — like going back to floor 1 every time you meant to stay on floor 2.
+
+
 ---
 
 ## 8. Subject Specifications Summary
@@ -573,6 +646,80 @@ The simulation will work like this:
 - Format: `D<ID>-<zone>` or `D<ID>-<connection>` (for in-transit drones)
 - Drones that do not move are omitted
 - Delivered drones are no longer tracked
+
+---
+
+## 10. Testing & Benchmarks
+
+### How to run a single map
+
+```bash
+make run MAP=maps/easy/01_linear_path.txt
+# or directly:
+python3 main.py maps/easy/01_linear_path.txt
+```
+
+### How to count simulation turns
+
+Pipe through `wc -l` — each line is one turn:
+
+```bash
+python3 main.py maps/hard/03_ultimate_challenge.txt | wc -l
+```
+
+### Run all maps automatically with the benchmark tester
+
+```bash
+python3 benchmark.py
+```
+
+This runs every map, counts turns, compares against the target, and prints ✅ or ❌ for each one.
+
+### Run all maps manually (one-liners)
+
+```bash
+# Easy
+for m in maps/easy/*.txt; do
+  echo "$(basename $m): $(python3 main.py "$m" | wc -l) turns"
+done
+
+# Medium
+for m in maps/medium/*.txt; do
+  echo "$(basename $m): $(python3 main.py "$m" | wc -l) turns"
+done
+
+# Hard
+for m in maps/hard/*.txt; do
+  echo "$(basename $m): $(python3 main.py "$m" | wc -l) turns"
+done
+
+# Challenger (optional)
+echo "challenger: $(python3 main.py maps/challenger/01_the_impossible_dream.txt | wc -l) turns"
+```
+
+### Performance benchmarks reference
+
+| Category | Map | Drones | Target | Our result |
+|----------|-----|--------|--------|------------|
+| 🟢 Easy | 01_linear_path | 2 | ≤6 | 4 |
+| 🟢 Easy | 02_simple_fork | 4 | ≤8 | 6 |
+| 🟢 Easy | 03_basic_capacity | 4 | ≤6 | 4 |
+| 🟡 Medium | 01_dead_end_trap | 5 | ≤12 | 8 |
+| 🟡 Medium | 02_circular_loop | 6 | ≤15 | 10 |
+| 🟡 Medium | 03_priority_puzzle | 5 | ≤12 | 8 |
+| 🔴 Hard | 01_maze_nightmare | 8 | ≤30 | 13 |
+| 🔴 Hard | 02_capacity_hell | 12 | ≤35 | 16 |
+| 🔴 Hard | 03_ultimate_challenge | 15 | ≤45 | 26 |
+| ⚫ Challenger | 01_the_impossible_dream | 25 | 45* | **43** |
+
+\* Reference record (optional, does not affect grade)
+
+### What the output tells you
+
+- **One line per turn** — drones that don't move are omitted
+- **Format:** `D<ID>-<zone>` for normal moves, `D<ID>-<from>-<to>` for restricted (in-transit)
+- **End:** when all drones reach the goal, simulation stops
+- **Empty output** means something is wrong (all drones stuck or loop)
 
 ---
 
@@ -637,4 +784,93 @@ checking_data(data):
     if end_count != 1:
         error missing/duplicated end_hub
 ```
+
+SIMULAR():
+    # Inicializar contadores de ocupación
+    ocupacion = {cada_zona: 0}
+    ocupacion[zona_start] = nb_drones  # todos empiegan ahí
+    
+    turno = 0
+    
+    REPETIR mientras no todos entregados:
+        turno += 1
+        output = []
+        
+        salen   = {zona: 0 para cada zona}
+        entran  = {zona: 0 para cada zona}
+        conexiones_usadas = {conexion: 0 para cada conexion}
+        
+        // ---- FASE 1: IN-TRANSIT (obligatorio) ----
+        PARA CADA dron NO entregado:
+            SI dron.in_transit:
+                dron.turns_remaining -= 1
+                SI turns_remaining == 0:
+                    zona_llegada = dron.path[dron.path_index + 1]
+                    entran[zona_llegada] += 1     // reservar llegada
+                    dron.current_zone = zona_llegada
+                    dron.path_index += 1
+                    dron.in_transit = False
+                    SI zona_llegada == end:
+                        dron.delivered = True
+                    output += "D{id}-{zona_llegada}"
+                    dron.ya_se_movio = True        // no puede moverse otra vez
+        
+        // ---- FASE 2: RECOGER INTENCIONES ----
+        movimientos_intentados = []
+        
+        PARA CADA dron NO entregado Y NO in_transit Y NO ya_se_movio:
+            siguiente = dron.path[dron.path_index + 1]
+            conexion = buscar_conexion(dron.current_zone, siguiente)
+            
+            coste = 1 si normal/priority, 2 si restricted
+            
+            movimientos_intentados += [
+                (dron, dron.current_zone, siguiente, conexion, coste)
+            ]
+        
+        // ---- FASE 3: VALIDAR Y APLICAR ----
+        PARA CADA (dron, origen, destino, conexion, coste) en movimientos_intentados:
+            // Proyección: ocupación del destino al final del turno
+            // = ocupacion_actual + entran - salen + este_dron
+            proyeccion = ocupacion[destino] + entran[destino] - salen[destino]
+            
+            SI destino == end O destino == start:
+                zona_libre = True
+            SINO:
+                zona_libre = (proyeccion < max_drones[destino])
+            
+            SI coste == 2:
+                zona_libre = True  // aún no llega, solo ocupa conexión
+            
+            conexion_libre = (conexiones_usadas[conexion]
+                              < max_link_capacity[conexion])
+            
+            SI zona_libre Y conexion_libre:
+                salen[origen] += 1
+                entran[destino] += 1       // para turno actual (coste 1)
+                                           // o para llegada futura (coste 2)
+                conexiones_usadas[conexion] += 1
+                dron.ya_se_movio = True
+                
+                SI coste == 2:
+                    dron.in_transit = True
+                    dron.turns_remaining = 1
+                    output += "D{id}-{origen}-{destino}"
+                SINO:
+                    dron.current_zone = destino
+                    dron.path_index += 1
+                    SI destino == end:
+                        dron.delivered = True
+                    output += "D{id}-{destino}"
+        
+        // ---- FASE 4: ACTUALIZAR OCUPACIONES ----
+        PARA CADA zona:
+            ocupacion[zona] += entran[zona] - salen[zona]
+        
+        SI output no vacío:
+            imprimir output.join(" ")
+        
+        // limpiar flag de movimiento para siguiente turno
+        PARA CADA dron:
+            dron.ya_se_movio = False
 
